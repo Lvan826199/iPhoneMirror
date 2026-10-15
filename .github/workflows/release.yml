@@ -147,6 +147,7 @@ jobs:
       - name: Build and test
         shell: pwsh
         env:
+          GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: ./build.ps1 -Configuration Release -Version $env:RELEASE_VERSION -PrepareUxPlayComponent
 

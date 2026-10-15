@@ -19,6 +19,12 @@ from pymobiledevice3.remote import userspace_tunnel
 
 
 class BundleTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # Ordinary download tests must not depend on developer/build payloads.
+        self.bundle_patch = patch.object(ddi, 'bundled_cryptex_directory', return_value=Path('missing-test-ddi'))
+        self.bundle_patch.start()
+        self.addCleanup(self.bundle_patch.stop)
+
     def fixture(self, root):
         payloads = {name: name.encode() for name in ddi.CRYPTEX_PAYLOAD_PATHS.values()}
         manifest = {'ProductBuildVersion': ddi.CRYPTEX_DDI_BUILD, 'BuildIdentities': [{
@@ -29,6 +35,39 @@ class BundleTests(unittest.IsolatedAsyncioTestCase):
         payloads['BuildManifest.plist'] = plistlib.dumps(manifest)
         hashes = {name: (len(data), hashlib.sha256(data).hexdigest()) for name, data in payloads.items()}
         return payloads, hashes
+
+    async def test_bundled_cryptex_is_verified_and_used_without_network_or_writable_cache(self):
+        with TemporaryDirectory() as temp:
+            root = Path(temp)
+            payloads, hashes = self.fixture(root)
+            for name, data in payloads.items():
+                (root / name).write_bytes(data)
+            with patch.object(ddi, 'bundled_cryptex_directory', return_value=root), \
+                 patch.object(ddi, 'CRYPTEX_DDI_FILES', hashes), \
+                 patch.object(ddi.httpx, 'AsyncClient') as network, \
+                 patch.object(ddi.Path, 'mkdir') as mkdir:
+                self.assertEqual(await ddi.fetch_cryptex_bundle(), root)
+                network.assert_not_called()
+                mkdir.assert_not_called()
+
+    async def test_corrupt_bundle_falls_back_to_verified_download(self):
+        with TemporaryDirectory() as temp:
+            root = Path(temp) / 'bundle'
+            root.mkdir()
+            payloads, hashes = self.fixture(root)
+            for name, data in payloads.items():
+                (root / name).write_bytes(data)
+            (root / 'Image.dmg').write_bytes(b'bad')
+            real_client = httpx.AsyncClient
+            with patch.object(ddi, 'bundled_cryptex_directory', return_value=root), \
+                 patch.object(ddi, 'CRYPTEX_DDI_FILES', hashes), \
+                 patch.dict(ddi.os.environ, {'LOCALAPPDATA': temp}), \
+                 patch.object(ddi.httpx, 'AsyncClient', side_effect=lambda **kw:
+                     real_client(transport=httpx.MockTransport(lambda request: httpx.Response(
+                         200, content=payloads[request.url.path.rsplit('/', 1)[-1]])), **kw)):
+                actual = await ddi.fetch_cryptex_bundle()
+                self.assertNotEqual(actual, root)
+                ddi.validate_cryptex_bundle(actual)
 
     async def test_download_validates_all_assets_and_reuses_verified_cache(self):
         with TemporaryDirectory() as temp:

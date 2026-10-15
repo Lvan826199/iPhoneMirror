@@ -45,6 +45,7 @@ iPhoneMirror 的重要變更均記錄於此。已發布版本遵循[語意化版
 ### 新增與改進
 
 - 支援同時錄製與直播，可分別停止輸出；直播期間可儲存或捨棄已完成的錄製。
+- 安裝程式與可攜版內建固定版本的 Personalized DDI 與 iOS 27 Cryptex DDI，使用前驗證內容；Apple 個人化簽章仍需連線。
 - 設定精靈增加工具入口，改進裝置繫結、開發者模式引導與錯誤提示。
 - 改進 Automation API 的遠端文字輸入、工作階段管理、平行輸出與啟動取消處理。
 
@@ -65,6 +66,7 @@ iPhoneMirror 的重要變更均記錄於此。已發布版本遵循[語意化版
 ### Added
 
 - Record and stream simultaneously, stop each output independently, and save or discard a completed recording while streaming continues.
+- Bundle pinned Personalized and iOS 27 Cryptex DDI assets in both Setup and portable ZIP builds; Apple personalization still requires network access.
 - Add setup tool entry points and improve device binding, developer mode guidance, and error messages.
 - Improve Automation API remote text input, session management, parallel output, and startup cancellation.
 

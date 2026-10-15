@@ -346,7 +346,19 @@ def validate_cryptex_bundle(root: Path) -> None:
                                       f'Cryptex DDI validation failed ({type(error).__name__}).') from error
 
 
+def bundled_cryptex_directory() -> Path:
+    base = Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent
+    return base / 'ddi' / 'Xcode_iOS_DDI_Cryptex'
+
+
 async def fetch_cryptex_bundle() -> Path:
+    bundled = bundled_cryptex_directory()
+    if bundled.is_dir():
+        try:
+            validate_cryptex_bundle(bundled)
+            return bundled
+        except BridgePrerequisiteError:
+            log.warning('Bundled Cryptex DDI failed validation; using verified cache/download.')
     root = Path(os.environ.get('LOCALAPPDATA') or tempfile.gettempdir()) / \
         'iPhoneMirror' / 'DDI' / 'Cryptex1' / CRYPTEX_DDI_REVISION
     try:

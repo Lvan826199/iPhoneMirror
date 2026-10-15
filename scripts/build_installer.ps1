@@ -75,6 +75,7 @@ $SourceDirectory = if ($SourceDirectory) {
 $OutputDirectory = if ($OutputDirectory) {
     [IO.Path]::GetFullPath($OutputDirectory)
 } else { Join-Path $Root 'outputs\releases' }
+. (Join-Path $PSScriptRoot 'DdiBundle.ps1')
 $numericVersion = ($Version -split '-', 2)[0] + '.0'
 $expectedName = "iPhoneMirror-Setup-v$Version-x64.exe"
 $expectedPath = Join-Path $OutputDirectory $expectedName
@@ -86,6 +87,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Release build failed: $LASTEXITCODE" }
     }
     $appExecutable = Join-Path $SourceDirectory 'iPhoneMirror.exe'
+    Assert-BundledDdi (Join-Path $SourceDirectory 'tools\ddi')
     if (-not (Test-Path -LiteralPath $appExecutable -PathType Leaf)) {
         throw "Published application is missing: $appExecutable"
     }

@@ -434,6 +434,10 @@ Push-Location $Root
 try {
     if ($TestBuild) { Clear-TestOutputs }
     Build-UsbTouchBridge
+    & $UsbControlPython (Join-Path $Root 'scripts\prepare_ddi.py')
+    if ($LASTEXITCODE -ne 0) { throw 'Bundled DDI preparation failed.' }
+    . (Join-Path $Root 'scripts\DdiBundle.ps1')
+    Assert-BundledDdi (Join-Path $Root 'tools\ddi')
 
     Assert-SafeWorkspaceDirectory $WirelessRoot
     if (-not (Test-Path -LiteralPath $WirelessManifest)) {
@@ -814,6 +818,7 @@ try {
         # The Personalized DDI bundle shipped beside the bridge (0202f06) is
         # published as loose content; allow every file beneath its directory.
         $ddiRoot = Join-Path $PublishRoot 'tools\ddi'
+        Assert-BundledDdi $ddiRoot
         if (Test-Path -LiteralPath $ddiRoot -PathType Container) {
             $optionalPublishedArtifacts += @(Get-ChildItem -LiteralPath $ddiRoot -Recurse -File |
                 ForEach-Object { $_.FullName.Substring($PublishRoot.Length + 1) })
@@ -1003,6 +1008,7 @@ try {
                 $InstallerPublishRoot | Out-Host
         }
         $installerBridgeToolsRoot = Join-Path $InstallerPublishRoot 'tools'
+        Assert-BundledDdi (Join-Path $installerBridgeToolsRoot 'ddi')
         Assert-UsbTouchBridgeRuntime -Directory $installerBridgeToolsRoot `
             -Label 'Shared-runtime installer USB touch bridge runtime'
         $installerBridgeRuntimeArtifacts = @(Get-UsbTouchBridgeRuntimePayloadFiles `

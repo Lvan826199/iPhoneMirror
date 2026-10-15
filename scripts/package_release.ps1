@@ -597,6 +597,9 @@ try {
     }
 
     Assert-PublishedOutput
+    . (Join-Path $PSScriptRoot 'DdiBundle.ps1')
+    Assert-BundledDdi (Join-Path $PublishRoot 'tools\ddi')
+    Assert-BundledDdi (Join-Path $InstallerPublishRoot 'tools\ddi')
     . (Join-Path $PSScriptRoot 'CompactBuildRecord.ps1')
     Assert-CompactBuildRecord $Root (-not $OmitUxPlayRuntime) $UseMediaOutputRuntime
     if (-not (Test-Path -LiteralPath $InstallerPublishRoot -PathType Container)) {

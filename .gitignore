@@ -13,6 +13,7 @@
 packages/
 build/
 dist/
+tools/ddi/
 out/
 outputs/
 outputs-next/

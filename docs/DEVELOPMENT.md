@@ -16,7 +16,7 @@
 | 网络 | 首次还原 NuGet/Python 包以及准备 FFmpeg、VC Runtime、UxPlay、Inno Setup 等依赖时需要网络 |
 
 Apple USB 支持和实机信任是运行有线功能的条件，不是离线协议单元测试的条件。
-Apple DDI 不随标准安装包分发；反控首次准备 DDI 的网络需求见[桥接使用说明](USB_TOUCH_BRIDGE_USAGE.md)。
+标准 ZIP 和 Setup 内置固定版本的 Personalized 与 Cryptex DDI；构建时下载并按 `config/ddi-bundles.json` 校验，打包缺失或损坏时失败。Apple 个性化签名的网络需求见[桥接使用说明](USB_TOUCH_BRIDGE_USAGE.md)。
 
 ## 仓库结构
 

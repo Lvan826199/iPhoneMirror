@@ -66,8 +66,10 @@ manifest 构建号和 payload digest，再请求 Apple 个性化签名并安装�
 准备隧道，重新建立控制会话，使 HID 服务列表刷新。已经安装的 Cryptex DDI 会保留；
 缺少真实触控 surface 时仍会报错，不会仅凭安装成功报告反控可用。
 
-该分支缓存位于 `%LOCALAPPDATA%\iPhoneMirror\DDI\Cryptex1`；首次准备需要访问
-GitHub 与 Apple 签名服务。下载优先使用 `raw.githubusercontent.com`，连接或 HTTP
+标准 ZIP 与 Setup 内置固定版本的 Personalized 和 Cryptex DDI。Cryptex 优先校验并读取
+`tools/ddi/Xcode_iOS_DDI_Cryptex`，无需先下载镜像；Apple 个性化签名仍需访问 Apple 服务。
+内置文件缺失或损坏时，回退缓存 `%LOCALAPPDATA%\iPhoneMirror\DDI\Cryptex1` 和下载。
+下载优先使用 `raw.githubusercontent.com`，连接或 HTTP
 错误时回退到 GitHub API 的同一固定提交，仍执行全部校验。`--ddi-dir` 的三文件 PersonalizedDMG
 目录适用于旧流程，不能代替 iOS 27 的 Cryptex 镜像。无线缺少 HID 时会通过同一台手机
 的 USB 连接准备 DDI，然后重建无线会话；未插线时仍需先连接 USB 完成准备。
