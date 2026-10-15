@@ -1596,6 +1596,7 @@
     <system:String x:Key="SetupCheckWaiting">等待检查</system:String>
     <system:String x:Key="SetupToolsDriverHint">安装和修复 Apple 支持组件与 USB 驱动。</system:String>
     <system:String x:Key="SetupToolsBindingHint">在独立窗口中管理有线、AirPlay 和蓝牙身份。</system:String>
+    <system:String x:Key="SetupToolsCombinedBindingHint">在设备绑定器中统一管理 USB、AirPlay 和蓝牙绑定，无线和蓝牙可稍后添加。</system:String>
     <system:String x:Key="SetupToolsOpen" xml:space="preserve">打开独立窗口  ↗</system:String>
     <system:String x:Key="SetupToolsReturnHint">在对应窗口中完成操作。关闭后会自动检查结果，也可以稍后继续。</system:String>
     <system:String x:Key="SetupToolsDriverWaiting">驱动管理器已打开，请在该窗口中操作。取消等待不会中断安装。</system:String>
@@ -1610,6 +1611,7 @@
     <system:String x:Key="DeviceBindingEmptyTitle">连接你的第一台 iPhone</system:String>
     <system:String x:Key="DeviceBindingEmptyHint">使用数据线连接并解锁 iPhone，轻点“信任”。也可以先启动 AirPlay，在手机上选择屏幕镜像后添加设备。</system:String>
     <system:String x:Key="DeviceBindingStartAirPlay">启动 AirPlay 接收</system:String>
+    <system:String x:Key="DeviceBindingAirPlayReceiving">AirPlay 接收已启动</system:String>
     <system:String x:Key="DeviceBindingAirPlayReady">AirPlay 已就绪。在 iPhone 控制中心打开“屏幕镜像”，选择这台电脑。</system:String>
     <system:String x:Key="DeviceBindingSavedFeedback">绑定已保存</system:String>
     <system:String x:Key="DeviceBindingWiredBrief">使用数据线连接并解锁 iPhone，在手机上轻点“信任”。</system:String>

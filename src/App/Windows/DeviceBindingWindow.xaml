@@ -98,7 +98,10 @@
                     </TextBlock>
                     <StackPanel Grid.Row="2" Margin="4,16,4,4">
                         <TextBlock Text="{DynamicResource DeviceBindingSidebarHint}" Style="{StaticResource BindingNote}" Margin="0,0,0,12"/>
-                        <Button Content="{DynamicResource DeviceBindingStartAirPlay}" Click="StartAirPlayClick" IsEnabled="{Binding CanInteract}" Padding="10,10"/>
+                        <TextBlock Text="{Binding AirPlayReceiverText}" Style="{StaticResource BindingNote}" AutomationProperties.LiveSetting="Polite"/>
+                        <Button Content="{DynamicResource SetupRetry}" Click="StartAirPlayClick" Padding="10,10" Margin="0,8,0,0">
+                            <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding CanRetryAirPlay}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Button.Style>
+                        </Button>
                     </StackPanel>
                 </Grid>
             </Border>

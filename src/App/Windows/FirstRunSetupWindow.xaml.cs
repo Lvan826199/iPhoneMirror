@@ -95,8 +95,9 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
     private void RefreshLabels()
     {
         if (_assessmentVisible) { RefreshAssessmentLabels(); return; }
-        Heading.Text = L(_state.Step == SetupStep.Completed && _state.HasSkippedSteps ? "SetupTitlePartial" : "SetupTitle" + _state.Step);
-        Description.Text = L(_state.Step == SetupStep.Completed && _state.HasSkippedSteps ? "SetupHintPartial" : "SetupHint" + _state.Step);
+        var combinedBinding = _state.Step == SetupStep.Profile && _state.Usage == SetupUsage.MirrorAndControl;
+        Heading.Text = L(combinedBinding ? "DeviceBindingTitle" : _state.Step == SetupStep.Completed && _state.HasSkippedSteps ? "SetupTitlePartial" : "SetupTitle" + _state.Step);
+        Description.Text = L(combinedBinding ? "SetupToolsCombinedBindingHint" : _state.Step == SetupStep.Completed && _state.HasSkippedSteps ? "SetupHintPartial" : "SetupHint" + _state.Step);
         PageSymbol.Data = Symbol(_state.Step switch
         {
             SetupStep.Welcome or SetupStep.Usage or SetupStep.Display => "spark", SetupStep.MirrorConnection => "monitor",

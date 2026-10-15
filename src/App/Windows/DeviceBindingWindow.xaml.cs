@@ -25,7 +25,14 @@ public sealed class ProfileListItem : INotifyPropertyChanged
         Profile.AirPlayIdentity?.Fingerprint ?? Profile.DeviceFingerprint)?.ProductName,
         (Profile.WiredIdentity?.Fingerprint ?? Profile.AirPlayIdentity?.Fingerprint ??
         Profile.DeviceFingerprint)?.ProductType, L("DeviceBindingModelUnknown"));
-    internal void Update(DeviceBindingProfile profile) { Profile = profile; PropertyChanged?.Invoke(this, new(null)); }
+    internal void Update(DeviceBindingProfile profile)
+    {
+        if (Equals(Profile, profile)) return;
+        Profile = profile;
+        PropertyChanged?.Invoke(this, new(nameof(DisplayName)));
+        PropertyChanged?.Invoke(this, new(nameof(DeviceName)));
+        PropertyChanged?.Invoke(this, new(nameof(ModelName)));
+    }
     internal void NotifyLanguageChanged() => PropertyChanged?.Invoke(this, new(null));
     public event PropertyChangedEventHandler? PropertyChanged;
     private static string L(string key) => LocalizationService.Get(key);
@@ -39,6 +46,8 @@ public partial class DeviceBindingWindow : IPhoneMirror.UI.Controls.RoundedWindo
     private readonly bool _previewOnly;
     private readonly CancellationTokenSource _lifetime = new();
     private Task _refreshTask = Task.CompletedTask;
+    private Task _receiverTask = Task.CompletedTask;
+    private bool _airPlayStarting, _airPlayReady, _airPlayFailed;
     private bool _working, _closed, _closeRequested;
     private string? _targetIdentity;
     private bool _targetPending;
@@ -46,11 +55,15 @@ public partial class DeviceBindingWindow : IPhoneMirror.UI.Controls.RoundedWindo
     private readonly HashSet<DeviceViewModel> _observedDevices = [];
     internal Func<Task<IReadOnlyList<BluetoothClientInfo>>> ReadBluetoothClientsAsync { get; set; }
     internal Func<CancellationToken, Task> ScanDevicesAsync { get; set; }
+    internal Func<CancellationToken, Task<bool>> StartAirPlayReceiverAsync { get; set; }
     internal Func<string, string, bool> ConfirmOperation { get; set; }
     internal Func<string, string?> RequestProfileName { get; set; }
     private readonly HashSet<string> _removedWiredIdentities = new(StringComparer.OrdinalIgnoreCase);
     private string _activityText = "";
-    internal Task CleanupTask => _refreshTask;
+    internal Task CleanupTask => Task.WhenAll(_refreshTask, _receiverTask);
+    public bool CanRetryAirPlay => _airPlayFailed && !_airPlayStarting;
+    public string AirPlayReceiverText => _airPlayStarting ? L("SetupToolsReceiverStarting") :
+        _airPlayReady ? L("DeviceBindingAirPlayReceiving") : _airPlayFailed ? L("SetupAirPlayFailed") : "";
     public bool CanInteract => !_working;
     public bool HasProfile => Profile is not null;
     public bool HasProfiles => Profiles.Count > 0;
@@ -102,6 +115,7 @@ public partial class DeviceBindingWindow : IPhoneMirror.UI.Controls.RoundedWindo
         _previewOnly = previewOnly;
         _manager = manager ?? DeviceBindingManager.Shared;
         ReadBluetoothClientsAsync = _viewModel.GetReverseBluetoothClientsAsync;
+        StartAirPlayReceiverAsync = EnsureAirPlayReceiverAsync;
         ScanDevicesAsync = async token =>
         {
             await _viewModel.SetupScanAsync(false, token);
@@ -134,7 +148,12 @@ public partial class DeviceBindingWindow : IPhoneMirror.UI.Controls.RoundedWindo
             if (!IsWorking) return;
             e.Cancel = true; _closeRequested = true; _lifetime.Cancel();
         };
-        Loaded += (_, _) => { if (!previewOnly) _refreshTask = RefreshLoopAsync(); };
+        Loaded += (_, _) =>
+        {
+            if (previewOnly) return;
+            _receiverTask = StartAirPlayAsync();
+            _refreshTask = RefreshLoopAsync();
+        };
     }
 
     internal static void ShowDeveloperPreview(Window owner, MainViewModel viewModel) =>
@@ -251,26 +270,49 @@ public partial class DeviceBindingWindow : IPhoneMirror.UI.Controls.RoundedWindo
         }
     }
 
-    private async void StartAirPlayClick(object sender, RoutedEventArgs e)
+    private void StartAirPlayClick(object sender, RoutedEventArgs e)
     {
-        if (_previewOnly || IsWorking) return;
-        IsWorking = true; ActivityText = L("SetupToolsReceiverStarting");
+        if (_previewOnly || _closed || _airPlayStarting || _airPlayReady) return;
+        _receiverTask = StartAirPlayAsync();
+    }
+
+    private async Task<bool> EnsureAirPlayReceiverAsync(CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (_viewModel.SelectedWirelessReceiverBackend.Backend == WirelessReceiverBackend.UxPlay &&
+            !new WirelessReceiverService().IsBackendAvailable(WirelessReceiverBackend.UxPlay))
+        {
+            var download = new ComponentDownloadWindow { Owner = this };
+            if (download.ShowDialog() != true) return false;
+        }
+        token.ThrowIfCancellationRequested();
+        return await _viewModel.SetupReceiverAsync(token);
+    }
+
+    private async Task StartAirPlayAsync()
+    {
+        _airPlayStarting = true; _airPlayFailed = false; NotifyAirPlayReceiver();
         try
         {
-            if (_viewModel.SelectedWirelessReceiverBackend.Backend == WirelessReceiverBackend.UxPlay &&
-                !new WirelessReceiverService().IsBackendAvailable(WirelessReceiverBackend.UxPlay))
-            {
-                var download = new ComponentDownloadWindow { Owner = this };
-                if (download.ShowDialog() != true) { ActivityText = L("SetupCancelled"); return; }
-            }
-            if (!await _viewModel.SetupReceiverAsync(_lifetime.Token))
+            // Let the binder render before checking components or opening a download window.
+            await Task.Yield();
+            _lifetime.Token.ThrowIfCancellationRequested();
+            if (!await StartAirPlayReceiverAsync(_lifetime.Token))
                 throw new InvalidOperationException(L("SetupAirPlayFailed"));
-            ActivityText = L("DeviceBindingAirPlayReady");
+            _lifetime.Token.ThrowIfCancellationRequested();
+            _airPlayReady = true;
+            if (!IsWorking) ActivityText = L("DeviceBindingAirPlayReady");
         }
-        catch (OperationCanceledException) { ActivityText = L("SetupCancelled"); }
-        catch (Exception error) { ActivityText = error.Message; }
-        finally { IsWorking = false; if (_closeRequested) Close(); }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (Exception error)
+        {
+            _airPlayFailed = true;
+            if (!_closed && !IsWorking) ActivityText = error.Message;
+        }
+        finally { _airPlayStarting = false; if (!_closed) NotifyAirPlayReceiver(); }
     }
+
+    private void NotifyAirPlayReceiver() { Notify(nameof(AirPlayReceiverText)); Notify(nameof(CanRetryAirPlay)); }
 
     internal void SelectIdentity(string? identity)
     {
@@ -398,6 +440,7 @@ public partial class DeviceBindingWindow : IPhoneMirror.UI.Controls.RoundedWindo
         ActivityText = LocalizationService.RefreshText(ActivityText);
         foreach (var profile in Profiles) profile.NotifyLanguageChanged();
         foreach (var client in BluetoothClients) client.NotifyLanguageChanged();
+        NotifyAirPlayReceiver();
         NotifyAll();
     }
     private void SynchronizeDeviceLists()

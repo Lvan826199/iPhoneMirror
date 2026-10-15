@@ -103,17 +103,6 @@ public partial class FirstRunSetupWindow
                 HorizontalAlignment = HorizontalAlignment.Left, Margin = new(0, 0, 0, 16) };
             icon.SetResourceReference(System.Windows.Shapes.Path.StrokeProperty, "TextBrush"); panel.Children.Add(icon);
             var title = Text("SetupControl" + mode, 16); title.FontWeight = FontWeights.SemiBold; panel.Children.Add(title);
-            var enabled = new CheckBox { Margin = new(0, 0, 0, 8), IsChecked = mode switch {
-                "Usb" => _state.UsbControlEnabled ?? true, "Wireless" => _state.WirelessEnabled ?? true, _ => _state.BluetoothEnabled ?? true } };
-            enabled.SetResourceReference(ContentControl.ContentProperty, "SetupCheckUseFeature");
-            void StoreChoice(object sender, RoutedEventArgs args)
-            {
-                if (mode == "Usb") _state.UsbControlEnabled = enabled.IsChecked == true;
-                else if (mode == "Wireless") _state.WirelessEnabled = enabled.IsChecked == true;
-                else _state.BluetoothEnabled = enabled.IsChecked == true;
-                Save();
-            }
-            enabled.Checked += StoreChoice; enabled.Unchecked += StoreChoice; panel.Children.Add(enabled);
             var detail = Text("SetupControlHint" + mode, 13); detail.LineHeight = 20;
             detail.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush"); panel.Children.Add(detail);
             var border = new Border { Child = panel, Padding = new(18), MinHeight = 270, CornerRadius = new(14), BorderThickness = new(1), Margin = new(0, 0, 12, 12) };
@@ -233,6 +222,7 @@ public partial class FirstRunSetupWindow
             return _state.Step == SetupStep.Wireless && _state.Devices.Count > 0 && _state.Devices.All(d =>
                 saved.FindByIdentity(DeviceIdentityType.AirPlay, d.Id) is not null);
         var profile = _state.CurrentDevice is { } device ? saved.FindByIdentity(DeviceIdentityType.Wired, device.Id) : null;
+        if (_state.Step == SetupStep.Profile && profile is not null) RecordOptionalBindings(profile);
         return _state.Step switch
         {
             SetupStep.Profile => profile is not null,

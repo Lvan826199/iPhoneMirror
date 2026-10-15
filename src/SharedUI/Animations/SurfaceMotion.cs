@@ -73,7 +73,11 @@ public static class SurfaceMotion
         element.Loaded += Loaded; element.Unloaded += Unloaded; element.IsVisibleChanged += Visible;
     }
     private static void Refresh(DependencyObject o, DependencyPropertyChangedEventArgs e)
-    { if (o is FrameworkElement element && GetEnabled(element)) Play(element); }
+    {
+        // Object-valued keys can be reboxed by bindings during a data refresh.
+        // Only a different identity should replay the entrance animation.
+        if (!Equals(e.OldValue, e.NewValue) && o is FrameworkElement element && GetEnabled(element)) Play(element);
+    }
     private static void Loaded(object sender, RoutedEventArgs e) => Play((FrameworkElement)sender);
     private static void Unloaded(object sender, RoutedEventArgs e) => Stop((FrameworkElement)sender);
     private static void Visible(object sender, DependencyPropertyChangedEventArgs e)

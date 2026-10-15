@@ -110,7 +110,9 @@ internal static partial class Program
                 if (usage == SetupUsage.WiredOnly)
                     Check(!visited.Any(v => v.Step is SetupStep.Wireless or SetupStep.Bluetooth or SetupStep.WiredControl), "Wired-only entered optional control flow.");
                 else
-                    Check(visited.Count(v => v.Step == SetupStep.Bluetooth) == 2 && visited.Any(v => v.Step == SetupStep.ControlIntroduction), "Control introduction or per-device Bluetooth missing.");
+                    Check(visited.Count(v => v.Step == SetupStep.Profile) == 2 && visited.Any(v => v.Step == SetupStep.ControlIntroduction) &&
+                        !visited.Any(v => v.Step is SetupStep.WirelessBackend or SetupStep.Wireless or SetupStep.Bluetooth),
+                        "Control setup must visit the combined binder once per device.");
                 state.Previous(); state.Previous(); state.Previous();
                 Check(state.Step == SetupStep.DeviceComplete && state.DeviceIndex == 1, "Back did not return to last device.");
                 state.SelectUsage(SetupUsage.WirelessOnly);
@@ -214,8 +216,14 @@ internal static partial class Program
             Step = SetupStep.Bluetooth, DeviceIndex = 1, PreferencesApplied = true,
             Devices = [new() { Id = "a" }, new() { Id = "b", Outcomes = new() { [SetupStep.Profile] = SetupOutcome.Verified, [SetupStep.Wireless] = SetupOutcome.Skipped } }] };
         store.Save(draft); var restored = store.Load();
-        Check(!restored.ShouldOpen && restored.DeviceIndex == 1 && restored.Step == SetupStep.Bluetooth && restored.CurrentDevice!.Outcomes[SetupStep.Wireless] == SetupOutcome.Skipped,
+        Check(!restored.ShouldOpen && restored.DeviceIndex == 1 && restored.Step == SetupStep.Profile && restored.CurrentDevice!.Outcomes[SetupStep.Wireless] == SetupOutcome.Skipped,
             "Resume lost device, step or skipped outcome.");
+        foreach (var legacyStep in new[] { SetupStep.WirelessBackend, SetupStep.Wireless, SetupStep.Bluetooth })
+        {
+            draft.Step = legacyStep; store.Save(draft);
+            Check(store.Load().Step == SetupStep.Profile && store.Load().DeviceIndex == 1,
+                "Legacy binding checkpoint did not resume on the combined binder: " + legacyStep);
+        }
         foreach (var disposition in new[] { SetupDisposition.Deferred, SetupDisposition.Completed })
         { draft.Disposition = disposition; store.Save(draft); Check(!store.Load().ShouldOpen, "Deferred/completed setup reopened automatically."); }
         draft.Disposition = SetupDisposition.InProgress; draft.Step = SetupStep.Completed; store.Save(draft);
@@ -282,6 +290,8 @@ internal static partial class Program
                     try
                     {
                         window.Show(); render.Invoke(window, null); window.UpdateLayout();
+                        if (step == SetupStep.ControlIntroduction)
+                            Check(!ComponentVisuals<CheckBox>(window).Any(), "Control introduction still asks users to enable individual features.");
                         Check(window.OwnedWindows.Count == 0, "Setup spawned another window.");
                         if (width == 880)
                         {

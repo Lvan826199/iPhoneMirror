@@ -137,8 +137,24 @@ internal static partial class Program
             var profile = bindings.Profiles.Single();
             bindings.Bind(profile.Id, DeviceIdentityType.AirPlay, "fixture-airplay", "iPhone", null, true);
             ToolsComplete(Run()); Check(Verified(), "An AirPlay binding was not recognized.");
+            window.State.Usage = SetupUsage.MirrorAndControl; window.State.Step = SetupStep.Profile;
+            ToolsComplete(Run());
+            Check(Verified() && window.State.CurrentDevice!.Outcomes[SetupStep.Wireless] == SetupOutcome.Verified &&
+                window.State.CurrentDevice.Outcomes[SetupStep.Bluetooth] == SetupOutcome.Skipped,
+                "Combined binding did not record saved AirPlay and optional Bluetooth state.");
+            window.State.CurrentDevice!.Outcomes[SetupStep.Environment] = SetupOutcome.Verified;
+            window.State.CurrentDevice.Outcomes[SetupStep.ReDetection] = SetupOutcome.Verified;
+            window.State.Next();
+            Check(window.State.Step == SetupStep.DeviceComplete && window.State.DeviceComplete(window.State.CurrentDevice),
+                "Combined binder still requires another binding page.");
+            window.State.Previous(); Check(window.State.Step == SetupStep.Profile, "Back navigation missed the combined binder.");
+            bindings.Bind(profile.Id, DeviceIdentityType.Bluetooth, "fixture-bluetooth", "iPhone", null, true);
+            ToolsComplete(Run());
+            Check(Verified() && window.State.CurrentDevice.Outcomes[SetupStep.Bluetooth] == SetupOutcome.Verified,
+                "Combined binding did not recognize a saved Bluetooth identity.");
+            bindings.Unbind(profile.Id, DeviceIdentityType.Bluetooth);
             // Wireless-only setup must use the chosen profile, never import all historical profiles.
-            window.State.Usage = SetupUsage.WirelessOnly; window.State.Devices.Clear();
+            window.State.Usage = SetupUsage.WirelessOnly; window.State.Step = SetupStep.Wireless; window.State.Devices.Clear();
             bindings.CreateProfileFromIdentity("Offline iPhone", DeviceIdentityType.AirPlay, "offline-airplay", null);
             window.OpenBindingToolAsync = (_, _) => Task.FromResult<string?>(null);
             ToolsComplete(Run()); Check(!Verified() && window.State.Devices.Count == 0, "Unselected historical AirPlay profiles were adopted.");

@@ -122,7 +122,16 @@ public partial class FirstRunSetupWindow
             if (profile is null || _state.Step == SetupStep.Wireless && profile.AirPlayIdentity is null ||
                 _state.Step == SetupStep.Bluetooth && profile.BluetoothIdentity is null)
                 throw new InvalidOperationException(L("SetupToolsIncomplete"));
+            if (_state.Step == SetupStep.Profile) RecordOptionalBindings(profile);
         }
+    }
+
+    private void RecordOptionalBindings(DeviceBindingProfile profile)
+    {
+        if (_state.Usage != SetupUsage.MirrorAndControl || _state.CurrentDevice is not { } device) return;
+        // The binder handles all identities in one visit. Optional identities can be added later.
+        device.Outcomes[SetupStep.Wireless] = profile.AirPlayIdentity is not null ? SetupOutcome.Verified : SetupOutcome.Skipped;
+        device.Outcomes[SetupStep.Bluetooth] = profile.BluetoothIdentity is not null ? SetupOutcome.Verified : SetupOutcome.Skipped;
     }
 
     private async Task OpenToolFromSummaryAsync(bool driver)

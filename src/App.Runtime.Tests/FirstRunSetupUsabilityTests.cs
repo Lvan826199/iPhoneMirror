@@ -55,16 +55,12 @@ internal static partial class Program
                 [SetupStep.Profile] = SetupOutcome.Verified, [SetupStep.Wireless] = SetupOutcome.Verified,
                 [SetupStep.Bluetooth] = SetupOutcome.Verified
             } }];
-            Render(SetupStep.WirelessBackend);
-            check(((TextBlock)window.FindName("DeviceLabel")).Text.Contains("Saved iPhone"), "Backend page lost the current device context.");
-            foreach (var step in new[] { SetupStep.Wireless, SetupStep.Bluetooth })
-            {
-                Render(step);
-                check(Button("Next").IsEnabled && ComponentVisuals<Button>(window).Any(b => System.Windows.Automation.AutomationProperties.GetName(b) == LocalizationService.Get("DeviceBindingTitle")),
-                    "Returning to a saved binding forced configuration again: " + step);
-            }
+            Render(SetupStep.Profile);
+            check(((TextBlock)window.FindName("DeviceLabel")).Text.Contains("Saved iPhone"), "Combined binding page lost the current device context.");
+            check(Button("Next").IsEnabled && ComponentVisuals<Button>(window).Any(b => System.Windows.Automation.AutomationProperties.GetName(b) == LocalizationService.Get("DeviceBindingTitle")),
+                "Returning to saved bindings forced configuration again.");
             complete((Task)Call("AdvanceAsync")!);
-            check(window.State.Step == SetupStep.DeviceComplete, "Saved Bluetooth binding could not continue without pairing again.");
+            check(window.State.Step == SetupStep.DeviceComplete, "Saved bindings did not continue directly to device completion.");
             window.State.Usage = SetupUsage.WirelessOnly;
             window.State.Devices = [new() { Id = "wireless-test", Name = "Saved iPhone" }];
             window.State.GlobalOutcomes[SetupStep.Wireless] = SetupOutcome.Verified;
@@ -75,8 +71,8 @@ internal static partial class Program
             check(!Button("Next").IsEnabled, "Checkpoint alone accepted a deleted binding.");
             window.State.Usage = SetupUsage.MirrorAndControl;
             window.State.Devices = [new() { Id = "wired-test", Outcomes = new() { [SetupStep.Bluetooth] = SetupOutcome.Verified } }];
-            Render(SetupStep.Bluetooth);
-            check(!Button("Next").IsEnabled, "Deleted wired profile still accepted its Bluetooth checkpoint.");
+            Render(SetupStep.Profile);
+            check(!Button("Next").IsEnabled, "Deleted wired profile still accepted its saved checkpoint.");
 
             Render(SetupStep.Environment);
             var opens = 0;

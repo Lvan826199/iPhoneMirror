@@ -1596,6 +1596,7 @@ Pair, select and save.</system:String>
     <system:String x:Key="SetupCheckWaiting">Waiting</system:String>
     <system:String x:Key="SetupToolsDriverHint">Install or repair Apple support and USB drivers.</system:String>
     <system:String x:Key="SetupToolsBindingHint">Manage USB, AirPlay and Bluetooth identities in a dedicated window.</system:String>
+    <system:String x:Key="SetupToolsCombinedBindingHint">Manage USB, AirPlay and Bluetooth bindings together. Wireless and Bluetooth can be added later.</system:String>
     <system:String x:Key="SetupToolsOpen" xml:space="preserve">Open window  ↗</system:String>
     <system:String x:Key="SetupToolsReturnHint">Complete the task in its window. Closing it checks the result; you can also continue later.</system:String>
     <system:String x:Key="SetupToolsDriverWaiting">Continue in Driver Manager. Cancelling this wait does not stop installation.</system:String>
@@ -1610,6 +1611,7 @@ Pair, select and save.</system:String>
     <system:String x:Key="DeviceBindingEmptyTitle">Connect your first iPhone</system:String>
     <system:String x:Key="DeviceBindingEmptyHint">Connect and unlock your iPhone, then tap Trust. Or start AirPlay, select Screen Mirroring on your phone, and add the device.</system:String>
     <system:String x:Key="DeviceBindingStartAirPlay">Start AirPlay receiver</system:String>
+    <system:String x:Key="DeviceBindingAirPlayReceiving">AirPlay receiver is running</system:String>
     <system:String x:Key="DeviceBindingAirPlayReady">AirPlay is ready. Open Screen Mirroring in Control Center and select this computer.</system:String>
     <system:String x:Key="DeviceBindingSavedFeedback">Binding saved</system:String>
     <system:String x:Key="DeviceBindingWiredBrief">Connect and unlock your iPhone, then tap Trust on the phone.</system:String>

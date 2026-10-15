@@ -69,10 +69,8 @@ internal sealed class FirstRunSetupState
     [JsonIgnore] public bool HasSavedDevices => Usage == SetupUsage.WirelessOnly
         ? GlobalOutcomes.GetValueOrDefault(SetupStep.Wireless) == SetupOutcome.Verified && Devices.Count > 0
         : Devices.Any(d => d.Outcomes.GetValueOrDefault(SetupStep.Profile) == SetupOutcome.Verified);
-    [JsonIgnore] public IReadOnlyList<SetupStep> DeviceSteps => Usage == SetupUsage.MirrorAndControl
-        ? [SetupStep.Environment, SetupStep.ReDetection, SetupStep.Profile,
-           SetupStep.WirelessBackend, SetupStep.Wireless, SetupStep.Bluetooth, SetupStep.DeviceComplete]
-        : [SetupStep.Environment, SetupStep.ReDetection, SetupStep.Profile, SetupStep.DeviceComplete];
+    [JsonIgnore] public IReadOnlyList<SetupStep> DeviceSteps =>
+        [SetupStep.Environment, SetupStep.ReDetection, SetupStep.Profile, SetupStep.DeviceComplete];
     internal void SelectUsage(SetupUsage usage)
     {
         if (Usage == usage) return;
@@ -117,14 +115,12 @@ internal sealed class FirstRunSetupState
     }
     internal Dictionary<SetupStep, SetupOutcome> Outcomes =>
         IsWiredDisplayStep && Devices.ElementAtOrDefault(DisplayDeviceIndex) is { } displayDevice ? displayDevice.Outcomes :
-        Usage != SetupUsage.WirelessOnly && DeviceSteps.Contains(Step) && CurrentDevice is { } device
+        Usage != SetupUsage.WirelessOnly && (DeviceSteps.Contains(Step) ||
+            Step is SetupStep.WirelessBackend or SetupStep.Wireless or SetupStep.Bluetooth) && CurrentDevice is { } device
             ? device.Outcomes : GlobalOutcomes;
     internal bool DeviceComplete(SetupDevice device) =>
         new[] { SetupStep.Environment, SetupStep.ReDetection, SetupStep.Profile }.All(s =>
-            device.Outcomes.GetValueOrDefault(s) is SetupOutcome.Verified or SetupOutcome.Skipped) &&
-        (Usage != SetupUsage.MirrorAndControl ||
-            (WirelessEnabled == false || device.Outcomes.GetValueOrDefault(SetupStep.Wireless) is SetupOutcome.Verified or SetupOutcome.Skipped) &&
-            (BluetoothEnabled == false || device.Outcomes.GetValueOrDefault(SetupStep.Bluetooth) is SetupOutcome.Verified or SetupOutcome.Skipped));
+            device.Outcomes.GetValueOrDefault(s) is SetupOutcome.Verified or SetupOutcome.Skipped);
     internal void Next()
     {
         if (Step is SetupStep.Environment or SetupStep.ReDetection or SetupStep.Profile or
@@ -149,6 +145,7 @@ internal sealed class FirstRunSetupState
             SetupStep.Connection => SetupStep.Environment,
             SetupStep.Devices => SetupStep.Environment,
             SetupStep.Wireless when Usage == SetupUsage.WirelessOnly => SetupStep.Display,
+            SetupStep.Wireless or SetupStep.Bluetooth => SetupStep.DeviceComplete,
             SetupStep.DeviceComplete => ++DeviceIndex < Devices.Count ? SetupStep.Environment : SetupStep.Display,
             SetupStep.Display => BeginDisplay(),
             SetupStep.WirelessBackend => Outcomes.GetValueOrDefault(SetupStep.WirelessBackend) == SetupOutcome.Skipped ? SkipWireless() : SetupStep.Wireless,
@@ -183,9 +180,7 @@ internal sealed class FirstRunSetupState
             SetupStep.Environment => DeviceIndex > 0 ? PreviousDevice() : SetupStep.Connection,
             SetupStep.Wireless => SetupStep.WirelessBackend,
             SetupStep.Bluetooth => WirelessEnabled == false ? SetupStep.Profile : CurrentDevice?.Outcomes.GetValueOrDefault(SetupStep.WirelessBackend) == SetupOutcome.Skipped ? SetupStep.WirelessBackend : SetupStep.Wireless,
-            SetupStep.DeviceComplete => CurrentDevice?.Outcomes.GetValueOrDefault(SetupStep.ReDetection) == SetupOutcome.Skipped ? SetupStep.ReDetection :
-                CurrentDevice?.Outcomes.GetValueOrDefault(SetupStep.Profile) == SetupOutcome.Skipped ? SetupStep.Profile :
-                Usage == SetupUsage.MirrorAndControl && BluetoothEnabled == false ? WirelessEnabled == false ? SetupStep.Profile : SetupStep.Wireless : DeviceSteps[^2],
+            SetupStep.DeviceComplete => CurrentDevice?.Outcomes.GetValueOrDefault(SetupStep.ReDetection) == SetupOutcome.Skipped ? SetupStep.ReDetection : SetupStep.Profile,
             SetupStep.Display => Usage == SetupUsage.WirelessOnly ? GlobalOutcomes.GetValueOrDefault(SetupStep.WirelessBackend) == SetupOutcome.Skipped ? SetupStep.WirelessBackend : SetupStep.Wireless : Devices.Count == 0 ? SetupStep.Connection : PreviousDevice(),
             SetupStep.WirelessBackend => Usage == SetupUsage.WirelessOnly ? SetupStep.MirrorConnection : SetupStep.Profile,
             SetupStep.WirelessDisplay => SetupStep.Display,
@@ -250,6 +245,12 @@ internal sealed class FirstRunSetupStore(string? path = null)
             if (state.Step == SetupStep.WiredControl) state.Step = SetupStep.Profile;
             if (state.Step == SetupStep.WirelessControl) state.Step = SetupStep.Bluetooth;
             if (state.Step == SetupStep.Devices) state.Step = SetupStep.Connection;
+            // Older control setup checkpoints split the same binder across three pages.
+            if (state.Usage == SetupUsage.MirrorAndControl && state.Step is
+                (SetupStep.WirelessBackend or SetupStep.Wireless or SetupStep.Bluetooth))
+                state.Step = state.CurrentDevice?.Outcomes.GetValueOrDefault(SetupStep.Profile) == SetupOutcome.Verified ||
+                    state.CurrentDevice?.Outcomes.GetValueOrDefault(SetupStep.ReDetection) == SetupOutcome.Verified
+                    ? SetupStep.Profile : SetupStep.ReDetection;
             if (state.Usage == SetupUsage.WirelessOnly && state.Step is not (SetupStep.Welcome or SetupStep.Preferences or SetupStep.ApplicationMode or
                 SetupStep.Appearance or SetupStep.Usage or SetupStep.MirrorConnection or SetupStep.Wireless or SetupStep.Display or SetupStep.WirelessBackend or
                 SetupStep.WirelessDisplay or SetupStep.Validation or SetupStep.Completed)) state.Step = SetupStep.Usage;

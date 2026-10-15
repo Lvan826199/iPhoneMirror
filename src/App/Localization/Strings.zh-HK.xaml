@@ -1596,6 +1596,7 @@
     <system:String x:Key="SetupCheckWaiting">等待檢查</system:String>
     <system:String x:Key="SetupToolsDriverHint">安裝和修復 Apple 支援元件與 USB 驅動程式。</system:String>
     <system:String x:Key="SetupToolsBindingHint">在獨立視窗中管理有線、AirPlay 和藍牙識別。</system:String>
+    <system:String x:Key="SetupToolsCombinedBindingHint">在裝置綁定器中統一管理 USB、AirPlay 和藍牙綁定，無線和藍牙可稍後新增。</system:String>
     <system:String x:Key="SetupToolsOpen" xml:space="preserve">開啟獨立視窗  ↗</system:String>
     <system:String x:Key="SetupToolsReturnHint">在對應視窗中完成操作。關閉後會自動檢查結果，也可以稍後繼續。</system:String>
     <system:String x:Key="SetupToolsDriverWaiting">驅動管理器已開啟，請在該視窗中操作。取消等待不會中斷安裝。</system:String>
@@ -1610,6 +1611,7 @@
     <system:String x:Key="DeviceBindingEmptyTitle">連接你的第一台 iPhone</system:String>
     <system:String x:Key="DeviceBindingEmptyHint">使用傳輸線連接並解鎖 iPhone，點一下「信任」。也可以先啟動 AirPlay，在手機上選擇螢幕鏡像輸出後新增裝置。</system:String>
     <system:String x:Key="DeviceBindingStartAirPlay">啟動 AirPlay 接收</system:String>
+    <system:String x:Key="DeviceBindingAirPlayReceiving">AirPlay 接收已啟動</system:String>
     <system:String x:Key="DeviceBindingAirPlayReady">AirPlay 已就緒。在 iPhone 控制中心開啟「螢幕鏡像輸出」，選擇這台電腦。</system:String>
     <system:String x:Key="DeviceBindingSavedFeedback">綁定已儲存</system:String>
     <system:String x:Key="DeviceBindingWiredBrief">使用傳輸線連接並解鎖 iPhone，在手機上點一下「信任」。</system:String>

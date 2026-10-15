@@ -22,10 +22,13 @@ internal static partial class Program
         var first = manager.CreateProfileFromIdentity("A", DeviceIdentityType.Wired, "wired-a", null).Profile!;
         var second = manager.CreateProfileFromIdentity("B", DeviceIdentityType.Wired, "wired-b", null).Profile!;
         ObservableCollection<DeviceViewModel> devices = [Device("wired-a", "A"), Device("wired-b", "B")];
+        var receiverReady = new TaskCompletionSource<bool>();
+        var receiverStarts = 0;
         var binder = new DeviceBindingWindow(owner, devices, vm, manager: manager)
         {
             ReadBluetoothClientsAsync = () => Task.FromResult<IReadOnlyList<BluetoothClientInfo>>([]),
-            ScanDevicesAsync = _ => Task.CompletedTask
+            ScanDevicesAsync = _ => Task.CompletedTask,
+            StartAirPlayReceiverAsync = _ => { receiverStarts++; return receiverReady.Task; }
         };
         object? Call(string name, params object?[] args) => typeof(DeviceBindingWindow)
             .GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(binder, args);
@@ -34,7 +37,22 @@ internal static partial class Program
         try
         {
             binder.Show(); ToolsPump();
+            check(receiverStarts == 1 && binder.CanInteract && !binder.CanRetryAirPlay,
+                "Opening the binder did not start AirPlay automatically or blocked device binding.");
+            Call("StartAirPlayClick", new Button(), new RoutedEventArgs());
+            check(receiverStarts == 1, "AirPlay startup was duplicated while pending.");
+            receiverReady.SetResult(true); ToolsPump();
+            check(binder.AirPlayReceiverText == IPhoneMirror.App.Localization.LocalizationService.Get("DeviceBindingAirPlayReceiving") && !binder.CanRetryAirPlay,
+                "Automatic AirPlay readiness was not displayed.");
             Select(first.Id);
+            ToolsPump(450);
+            var detailSurface = ComponentVisuals<StackPanel>(binder).Single(p =>
+                Equals(IPhoneMirror.UI.Animations.SurfaceMotion.GetRefreshKey(p), first.Id));
+            manager.RefreshFromDisk(); Call("SynchronizeProfiles"); ToolsPump(30);
+            check(detailSurface.Opacity > .99, "Refreshing an unchanged profile replayed the detail entrance animation.");
+            manager.RenameProfile(first.Id, "Updated A"); Call("SynchronizeProfiles"); ToolsPump(30);
+            check(detailSurface.Opacity > .99 && binder.ProfileTitle == "Updated A",
+                "Updating the selected profile replayed its entrance animation or lost its new name.");
             binder.RequestProfileName = _ => { Select(second.Id); return "Renamed A"; };
             Call("RenameProfileClick", new Button(), new RoutedEventArgs());
             check(manager.FindById(first.Id)?.DisplayName == "Renamed A" && manager.FindById(second.Id)?.DisplayName == "B",
@@ -111,12 +129,42 @@ internal static partial class Program
                 IPhoneMirror.UI.Animations.SurfaceMotion.SetRefreshKey(surface, "A"); ToolsPump(60);
                 IPhoneMirror.UI.Animations.SurfaceMotion.SetRefreshKey(surface, "B"); ToolsPump(450);
                 check(Math.Abs(surface.Opacity - .55) < .001, "Repeated surface motion overwrote its opacity.");
+                var identity = Guid.NewGuid();
+                IPhoneMirror.UI.Animations.SurfaceMotion.SetRefreshKey(surface, identity); ToolsPump(450);
+                IPhoneMirror.UI.Animations.SurfaceMotion.SetRefreshKey(surface, Guid.Parse(identity.ToString())); ToolsPump(30);
+                check(Math.Abs(surface.Opacity - .55) < .001, "An equal reboxed identity restarted the entrance animation.");
                 IPhoneMirror.UI.Animations.SurfaceMotion.SetEnabled(surface, false);
                 check(!surface.HasAnimatedProperties && Math.Abs(surface.Opacity - .55) < .001, "Disabling motion retained an opacity clock.");
             }
             finally { animationWindow.Close(); }
             Console.WriteLine("PASS repeated transitions preserve opacity and release animation clocks.");
             Console.WriteLine("PASS modal target stability, live AirPlay chooser, late target discovery, user selection, stale-device rejection, delete suppression and close cleanup.");
+            var failedReceiver = new DeviceBindingWindow(owner, [], vm, manager: manager)
+            {
+                ReadBluetoothClientsAsync = () => Task.FromResult<IReadOnlyList<BluetoothClientInfo>>([]),
+                ScanDevicesAsync = _ => Task.CompletedTask,
+                StartAirPlayReceiverAsync = _ => Task.FromResult(false)
+            };
+            try
+            {
+                failedReceiver.Show(); ToolsPump();
+                check(failedReceiver.CanRetryAirPlay && failedReceiver.CanInteract, "Automatic AirPlay failure has no retry or blocked USB binding.");
+                var lateStart = new TaskCompletionSource<bool>();
+                CancellationToken receiverToken = default;
+                failedReceiver.StartAirPlayReceiverAsync = token => { receiverToken = token; return lateStart.Task; };
+                typeof(DeviceBindingWindow).GetMethod("StartAirPlayClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(failedReceiver, [new Button(), new RoutedEventArgs()]); ToolsPump();
+                check(!failedReceiver.CanRetryAirPlay, "AirPlay retry remained enabled during startup.");
+                failedReceiver.Close();
+                check(receiverToken.IsCancellationRequested && !failedReceiver.CleanupTask.IsCompleted,
+                    "Closing the binder did not cancel and await AirPlay startup.");
+                var lateUpdates = 0;
+                failedReceiver.PropertyChanged += (_, _) => lateUpdates++;
+                lateStart.SetResult(true); ToolsComplete(failedReceiver.CleanupTask);
+                check(lateUpdates == 0, "A late AirPlay startup updated the closed binder.");
+            }
+            finally { failedReceiver.Close(); }
+            Console.WriteLine("PASS automatic AirPlay startup, responsive binding, single flight, readiness, failure retry and startup close cleanup.");
         }
         finally { binder.Close(); }
     }
