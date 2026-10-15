@@ -17,6 +17,11 @@ on:
         description: Expected tag commit; defaults to the selected workflow ref
         required: false
         type: string
+      publish_release:
+        description: Publish publicly and update the fallback manifest (disabled creates a draft only)
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   actions: write
@@ -326,9 +331,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
           RELEASE_NOTES: ${{ steps.notes.outputs.path }}
+          PUBLISH_RELEASE: ${{ inputs.publish_release == true }}
         run: |
-          $releaseFlags = @("--prerelease=$($env:RELEASE_TAG.Contains('-').ToString().ToLowerInvariant())")
-          if ($env:RELEASE_TAG.Contains('-')) { $releaseFlags += '--latest=false' }
+          $isPrerelease = $env:PUBLISH_RELEASE -eq 'true' -and $env:RELEASE_TAG.Contains('-')
+          $releaseFlags = @("--prerelease=$($isPrerelease.ToString().ToLowerInvariant())", '--latest=false')
           $releaseJson = gh release view $env:RELEASE_TAG `
             --repo $env:GITHUB_REPOSITORY --json isDraft 2> $null
           if ($LASTEXITCODE -eq 0) {
@@ -456,6 +462,7 @@ jobs:
           }
 
       - name: Prepare fallback release manifest commit
+        if: inputs.publish_release == true
         id: manifest
         shell: pwsh
         env:
@@ -736,6 +743,7 @@ jobs:
           }
 
       - name: Publish release and fallback manifest
+        if: inputs.publish_release == true
         id: transaction
         shell: pwsh
         env:
@@ -975,11 +983,28 @@ jobs:
           }
           "cleanup_branch=true" >> $env:GITHUB_OUTPUT
 
+      - name: Confirm draft is ready for manual editing
+        if: inputs.publish_release != true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          $json = gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY `
+            --json isDraft,isPrerelease,url,assets
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect the completed draft.' }
+          $release = $json | ConvertFrom-Json
+          if (-not $release.isDraft -or $release.isPrerelease -or @($release.assets).Count -ne 5) {
+            throw 'Release must remain a draft with five verified assets.'
+          }
+          "Draft ready for manual editing: $($release.url)" >> $env:GITHUB_STEP_SUMMARY
+
       - name: Reconcile interrupted release transaction
         id: reconcile
         # Never publish through recovery when tag/preflight checks skipped publication.
         if: >-
           always() &&
+          inputs.publish_release == true &&
           steps.manifest.outcome == 'success' &&
           steps.transaction.outcome != 'skipped' &&
           steps.transaction.outcome != 'success' &&
