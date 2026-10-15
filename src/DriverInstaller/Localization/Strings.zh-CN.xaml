@@ -124,6 +124,9 @@
     <system:String x:Key="AppleServiceMissing">Apple USB 驱动已安装，但缺少 Apple Mobile Device Service</system:String>
     <system:String x:Key="AppleUsbDriverMissing">Apple Mobile Device Service 已安装，但缺少 Apple USB 驱动包</system:String>
     <system:String x:Key="AppleSupportMissing">未检测到 Apple Devices 或 Apple Mobile Device Support</system:String>
+    <system:String x:Key="AppleMuxReady">Apple USB 驱动和设备通信服务已就绪（兼容 Apple Devices）。</system:String>
+    <system:String x:Key="AppleMuxUnknownListener">未知进程</system:String>
+    <system:String x:Key="AppleMuxPortConflict">127.0.0.1:27015 被 {0} 占用，但未返回有效的 Apple 设备列表。请退出对应应用后重试。若为 Apple Devices，请先退出该应用，并在任务管理器结束 AppleMobileDeviceLauncher.exe 和 AppleMobileDeviceProcess.exe，再重新准备驱动。无需重复安装 Apple 支持组件。</system:String>
     <system:String x:Key="LibUsbMissing">libusb0 共享服务尚未安装</system:String>
     <system:String x:Key="LibUsbFilesMismatch">libusb0 文件缺失或与受信任版本不一致</system:String>
     <system:String x:Key="LibUsbRunning">libusb0 {0} 正在运行</system:String>

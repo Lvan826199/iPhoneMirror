@@ -194,6 +194,13 @@ D3D11 渲染，不再改写 HPD1，也不会为切换档位重连 USB。
 - C 爱思兼容模式：发送 `Valeria=false + DisplaySize=1565×1565`，不进行自适应重配，
   以固定协商换取兼容性，但会降低源画面清晰度。
 
+型号尺寸由 `Capture/UsbDisplaySize.h` 按完整 ProductType 匹配。12.9 英寸 iPad Pro
+（包括 2018 款 iPad8,5–iPad8,8）请求竖屏 2048×2732；不同尺寸的 Pro、Air、mini
+分别使用其面板参数。未知 iPad 保留 1640×2360 的兼容回退，日志以
+`display_size_source=fallback` 标识；已收录型号为 `model`。这些是请求尺寸，
+并不保证设备输出面板原生分辨率，也不代表存在 1600×1200 的源流上限。
+高级模式的自定义 USB 尺寸仅应用于 B 模式；普通“原生”画质选项只取消本地渲染上限。
+
 ## 8. Windows 重新设计
 
 不直接移植参考实现，原因：
@@ -208,6 +215,10 @@ D3D11 渲染，不再改写 HPD1，也不会为切换档位重连 USB。
 iPhoneMirror 的设计：
 
 - Apple 官方 27015 只负责发现、配对、Lockdown；
+- 驱动准备通过只读 `ListDevices` 检查 127.0.0.1:27015，兼容商店版 Apple Devices
+  提供的 USBMux，无须另外启动传统 Apple Mobile Device Service。空设备列表也视为
+  通信服务可用，但仍须存在 Apple USB 驱动包；端口有监听却返回无效响应或超时时，
+  提示监听进程及退出应用后重试，阻止用重复安装组件处理端口冲突；
 - 单独的 QtUsbTransport 负责 control request 和 `0x2A` bulk 端点，具体驱动后端可替换；
 - 每设备独立 CaptureSession 和取消令牌；
 - 所有长度、乘法、偏移在读取前验证，并设置包上限；

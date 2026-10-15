@@ -69,6 +69,10 @@ jobs:
         shell: pwsh
         run: ./scripts/verify_localization_surfaces.ps1
 
+      - name: Verify SRS lab HTTP error handling
+        shell: pwsh
+        run: node --test scripts/test_srs_lab_server.mjs
+
       - name: Set up MSYS2 UCRT64 for UxPlay
         uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
         with:
@@ -93,6 +97,10 @@ jobs:
       - name: Build Release, run tests, and publish Windows x64 output
         shell: pwsh
         run: ./build.ps1 -Configuration Release
+
+      - name: Build Bluetooth HID stress tool
+        shell: pwsh
+        run: dotnet build tools/BluetoothHidStress/BluetoothHidStress.csproj --configuration Release
 
       - name: Build Windows x64 EXE installer
         if: github.event_name != 'workflow_dispatch' || inputs.build_installer

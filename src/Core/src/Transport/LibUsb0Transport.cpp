@@ -1024,8 +1024,16 @@ LibUsb0Connection LibUsb0Connection::open_quicktime(
     }
 
     connection.endpoints_ = endpoints_for(*device, QuickTimeSubclass);
-    if (!connection.endpoints_.configuration &&
-        options.wait_for_activated_descriptor) {
+    // A visible configuration-5 descriptor is not proof that the device has
+    // left configuration 3. Wait for both pieces of evidence after our own
+    // activation; an existing session remains on the claim-only path.
+    if (options.wait_for_activated_descriptor &&
+        (!connection.endpoints_.configuration ||
+            !is_libusb0_quicktime_configuration_active(selected_info))) {
+        logging::write(std::format(
+            "libusb0_activation_pending active_configuration={} active_known={} descriptor_configuration={}",
+            selected_info.active_configuration, selected_info.active_configuration_known,
+            connection.endpoints_.configuration));
         const auto deadline = std::chrono::steady_clock::now() +
             ActivatedDescriptorTimeout;
         HandleConfigurationObservation observation;
@@ -1056,7 +1064,7 @@ LibUsb0Connection LibUsb0Connection::open_quicktime(
             }
             if (std::chrono::steady_clock::now() >= deadline) {
                 fail(std::format(
-                    "activated QuickTime descriptor was not committed within {} ms "
+                    "activated QuickTime descriptor/configuration was not committed within {} ms "
                     "(probes={}, configurations={}, active_configuration={}, active_known={}, last_descriptor_result={})",
                     std::chrono::duration_cast<std::chrono::milliseconds>(
                         ActivatedDescriptorTimeout).count(),

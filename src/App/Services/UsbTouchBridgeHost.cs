@@ -85,7 +85,7 @@ internal sealed class UsbTouchBridgeHost : IAsyncDisposable
                 Raise("ready", null, $"{transport}:{udid}");
             }
         }
-        catch
+        catch (Exception error)
         {
             Task? stop = null;
             lock (_gate)
@@ -94,7 +94,8 @@ internal sealed class UsbTouchBridgeHost : IAsyncDisposable
                 {
                     if (_started != 0)
                     {
-                        State = ReverseControlState.Error;
+                        State = error is BridgeUserActionRequiredException
+                            ? ReverseControlState.Idle : ReverseControlState.Error;
                         stop = StopAsync();
                     }
                     else stop = _stopTask;

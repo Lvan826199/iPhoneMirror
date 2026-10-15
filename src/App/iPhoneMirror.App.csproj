@@ -1,9 +1,10 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="IPhoneMirror.App.Runtime.Tests" />
+    <InternalsVisibleTo Include="BluetoothHidStress" />
   </ItemGroup>
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -15,7 +16,7 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <AssemblyName>iPhoneMirror</AssemblyName>
     <RootNamespace>IPhoneMirror.App</RootNamespace>
-    <Version>1.8.5-pre2</Version>
+    <Version>1.8.5-pre3</Version>
     <AssemblyVersion>1.8.5.0</AssemblyVersion>
     <FileVersion>1.8.5.0</FileVersion>
     <Authors>RayrenSX</Authors>
@@ -95,6 +96,7 @@
     <Compile Include="..\SharedUI\Services\AccessibilityAppearance.cs" Link="Services\AccessibilityAppearance.cs" />
     <Compile Include="..\SharedUI\Services\WindowWorkAreaController.cs"
              Link="Services\WindowWorkAreaController.cs" />
+    <Compile Include="..\SharedUI\Animations\SurfaceMotion.cs" Link="Animations\SurfaceMotion.cs" />
     <Compile Include="..\SharedUI\Animations\PageTransition.cs"
              Link="Animations\PageTransition.cs" />
     <Compile Include="..\SharedUI\Animations\RevealTransition.cs"

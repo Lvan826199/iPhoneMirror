@@ -50,6 +50,28 @@ iUsbBridge.exe --enable-wifi-sync --udid UDID
 
 USB 模式要求 iPhone 通过数据线连接、已解锁并信任此电脑。
 
+在有线控制提示中点击“继续”后，若开发者模式尚未开启，桥接器会通过
+`com.apple.amfi.lockdown` 的 `action=0` 请求显示设置中的“开发者模式”开关。
+设备确认后发送 `user_action_required` 事件（`code=developer_mode_revealed`），
+结束本次连接并释放 USB 资源，界面显示“等待在手机上开启开发者模式”，不记录为控制失败。
+请在手机的
+“设置 > 隐私与安全性 > 开发者模式”中手动开启、重启并确认，再回到窗口点击“重试”。
+这一步只显示开关，不会自动开启模式或重启手机。已开启时继续正常准备 DDI。
+请求被拒绝或超时分别返回 `developer_mode_reveal_failed` / `developer_mode_reveal_timeout`，
+不会提示已成功显示；无线控制和只读配置检查不会发送此请求。
+
+当前源码对 iOS 27 使用 Cryptex DDI 准备流程：通过目标手机的可信 USB 连接建立
+CoreDevice/RSD 隧道，从固定的上游提交下载 Cryptex 镜像，校验大小、SHA-256、
+manifest 构建号和 payload digest，再请求 Apple 个性化签名并安装。安装完成后关闭
+准备隧道，重新建立控制会话，使 HID 服务列表刷新。已经安装的 Cryptex DDI 会保留；
+缺少真实触控 surface 时仍会报错，不会仅凭安装成功报告反控可用。
+
+该分支缓存位于 `%LOCALAPPDATA%\iPhoneMirror\DDI\Cryptex1`；首次准备需要访问
+GitHub 与 Apple 签名服务。下载优先使用 `raw.githubusercontent.com`，连接或 HTTP
+错误时回退到 GitHub API 的同一固定提交，仍执行全部校验。`--ddi-dir` 的三文件 PersonalizedDMG
+目录适用于旧流程，不能代替 iOS 27 的 Cryptex 镜像。无线缺少 HID 时会通过同一台手机
+的 USB 连接准备 DDI，然后重建无线会话；未插线时仍需先连接 USB 完成准备。
+
 ### 无线模式
 
 ```powershell
@@ -98,7 +120,8 @@ stdout 每行是一个 JSON 对象。常见事件如下：
 桥接器只会在 `gateOpen=true` 且已验证 mainTouchscreen（Service ID `257`）时发布
 `ready`。`authMode` 为 `mediastream` 或 `direct`；后者表示媒体流认证被拒后，
 通过 direct Universal HID 验证的回退路径。已挂载 DDI 缺少该 surface 时，桥接器会
-自动重挂一次而非报告一个无法触控的 ready。
+在旧镜像流程中自动重挂一次而非报告一个无法触控的 ready；Cryptex 流程保留现有镜像，
+通过重新连接刷新服务列表，仍缺少 surface 时报告失败。
 
 ## 4. stdin 消息封装
 

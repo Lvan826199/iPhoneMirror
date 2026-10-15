@@ -31,7 +31,17 @@ var diagnosticTestRoot = args is ["--component-public-uxplay", var componentPubl
 Environment.SetEnvironmentVariable("IPHONE_MIRROR_APP_LOG_DIRECTORY",
     diagnosticTestRoot, EnvironmentVariableTarget.Process);
 
+await ReviewFixRegressionTests.RunAsync();
+if (args is ["--review-fixes"]) return;
+
+if (args is ["--issue-media", var verifiedFfmpeg])
+{
+    await IssueFixMediaTests.RunExplicitAsync(Path.GetFullPath(verifiedFfmpeg));
+    return;
+}
+
 await UxPlayComponentTests.RunAsync();
+await MediaOutputCoordinatorTests.RunAsync();
 if (args is ["--uxplay-component"]) return;
 if (args is ["--component-public-uxplay", var uxplayPublicOutput])
 {
@@ -1155,6 +1165,7 @@ foreach (var windowPath in themedWindowDirectories.SelectMany(directory =>
         $"{windowName} uses a draggable custom window surface");
     Equal(true,
         windowText.Contains("PageTransition.IsEnabled", StringComparison.Ordinal) ||
+        windowText.Contains("SurfaceMotion.Enabled=\"True\"", StringComparison.Ordinal) ||
         windowText.Contains("EntranceTransform", StringComparison.Ordinal),
         $"{windowName} has a restrained entrance transition");
 }
@@ -4821,10 +4832,13 @@ await using (var immediateExitOutput = new MediaOutputService((_, _, _) => null,
             EnvironmentVariableTarget.Process);
         var delayedExitCapabilities = ffmpegCapabilities with
         {
-            FfmpegPath = Environment.ProcessPath ??
-                throw new InvalidOperationException(
-                    "The test process executable path is unavailable."),
+            // dotnet <assembly.dll> makes ProcessPath point at dotnet.exe.
+            // Launch our apphost so the delayed-exit fixture actually runs.
+            FfmpegPath = Path.Combine(AppContext.BaseDirectory,
+                "IPhoneMirror.App.Logic.Tests.exe"),
         };
+        Equal(true, File.Exists(delayedExitCapabilities.FfmpegPath),
+            "the output startup fixture requires its executable apphost");
         await ThrowsAsync<InvalidOperationException>(() =>
                 immediateExitOutput.StartAsync(1, processTestRequest,
                     delayedExitCapabilities),
@@ -5615,6 +5629,43 @@ Equal(true, bindings.UnbindBluetoothByStableId("BluetoothLE#A"),
 var reloadedBindings = new DeviceBindingManager(deviceBindingPath);
 Equal("UDID-A", reloadedBindings.FindById(profileA.Id)!.WiredIdentity!.Udid,
     "profiles persist across manager reload");
+
+// A file locked against replacement must not publish any uncommitted state.
+Equal(true, bindings.Bind(profileA.Id, DeviceIdentityType.Bluetooth,
+    "BluetoothLE#A", "Device A", null, userConfirmed: true).Success, "seed Bluetooth binding for save failures");
+Equal(true, bindings.Bind(profileB.Id, DeviceIdentityType.Bluetooth,
+    "BluetoothLE#B", "Device B", null, userConfirmed: true).Success, "seed second Bluetooth binding");
+var savedProfiles = bindings.Profiles.ToArray();
+var savedJson = File.ReadAllText(deviceBindingPath);
+using (var lockedProfiles = new FileStream(deviceBindingPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+{
+    var failedCreate = bindings.CreateProfileFromIdentity("Unsaved", DeviceIdentityType.Wired, "UDID-UNSAVED", phone17);
+    Equal(false, failedCreate.Success, "failed creation reports failure");
+    Equal(null, failedCreate.Profile, "failed creation does not return a usable profile");
+    Equal(false, string.IsNullOrWhiteSpace(failedCreate.Error), "failed creation explains storage failure");
+    Equal(false, bindings.RenameProfile(profileA.Id, "Unsaved name"), "failed rename reports failure");
+    Equal(false, bindings.DeleteProfile(profileB.Id), "failed deletion reports failure");
+    var failedBind = bindings.Bind(profileA.Id, DeviceIdentityType.AirPlay,
+        "airplay://unsaved", "Device A", phone17, userConfirmed: true);
+    Equal(false, failedBind.Success, "failed binding reports failure");
+    Equal(false, string.IsNullOrWhiteSpace(failedBind.Error), "failed binding explains storage failure");
+    Equal(false, bindings.Unbind(profileA.Id, DeviceIdentityType.Wired), "failed unbind reports failure");
+    Equal(false, bindings.UnbindBluetoothByStableId("BluetoothLE#A"), "failed Bluetooth unbind reports failure");
+    Equal(0, bindings.ClearBluetoothBindings(), "failed bulk clear reports no saved changes");
+    Equal(true, savedProfiles.SequenceEqual(bindings.Profiles), "all failed writes preserve the exact memory snapshot");
+    Equal(savedJson, File.ReadAllText(deviceBindingPath), "all failed writes preserve disk state");
+    Equal(true, savedProfiles.SequenceEqual(new DeviceBindingManager(deviceBindingPath).Profiles),
+        "reopening after failed writes preserves bindings");
+    Equal(0, Directory.GetFiles(deviceBindingTestRoot, "*.tmp").Length, "failed writes clean temporary files");
+}
+Equal(true, bindings.RenameProfile(profileA.Id, "Saved name"), "save can recover after the file is unlocked");
+Equal("Saved name", new DeviceBindingManager(deviceBindingPath).FindById(profileA.Id)!.DisplayName,
+    "successful retry survives restart");
+Equal(2, bindings.ClearBluetoothBindings(), "bulk clear commits all Bluetooth bindings together");
+Equal(true, new DeviceBindingManager(deviceBindingPath).Profiles.All(p => p.BluetoothIdentity is null),
+    "bulk clear survives restart");
+var readOnlyBindings = new DeviceBindingManager(deviceBindingPath, readOnly: true);
+Equal(false, readOnlyBindings.RenameProfile(profileA.Id, "Read-only mutation"), "read-only snapshots reject writes");
 if (Directory.Exists(deviceBindingTestRoot))
     Directory.Delete(deviceBindingTestRoot, recursive: true);
 

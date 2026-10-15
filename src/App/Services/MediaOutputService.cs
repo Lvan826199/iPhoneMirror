@@ -55,7 +55,7 @@ internal sealed record MediaOutputCapabilities(
     };
 }
 
-internal sealed class MediaOutputService : IAsyncDisposable
+internal sealed class MediaOutputService : IMediaOutputSession
 {
     private static readonly TimeSpan StartupObservationWindow =
         TimeSpan.FromMilliseconds(350);
@@ -80,6 +80,18 @@ internal sealed class MediaOutputService : IAsyncDisposable
     internal event Action<string, bool>? StatusChanged;
     internal bool IsRunning => _runTask is { IsCompleted: false };
     internal ulong SessionHandle { get; private set; }
+
+    bool IMediaOutputSession.IsRunning => IsRunning;
+    ulong IMediaOutputSession.SessionHandle => SessionHandle;
+    event Action<string, bool>? IMediaOutputSession.StatusChanged
+    {
+        add => StatusChanged += value;
+        remove => StatusChanged -= value;
+    }
+    Task IMediaOutputSession.StartAsync(ulong sessionHandle, MediaOutputRequest request,
+        MediaOutputCapabilities capabilities, CancellationToken cancellationToken) =>
+        StartAsync(sessionHandle, request, capabilities, cancellationToken);
+    Task IMediaOutputSession.StopAsync() => StopAsync();
 
     internal MediaOutputService(Func<ulong, uint, uint, Nv12VideoFrame?> frameProvider,
         Func<ulong, ulong, AudioPacket?> audioProvider)

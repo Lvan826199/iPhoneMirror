@@ -8,7 +8,8 @@ namespace IPhoneMirror.App.Services;
 internal sealed record DriverManagerLaunchResult(
     bool Success,
     string? ExecutablePath,
-    string Message);
+    string Message,
+    int? ProcessId = null);
 
 internal sealed class DriverManagerLauncher
 {
@@ -31,8 +32,8 @@ internal sealed class DriverManagerLauncher
                 return new(false, executablePath,
                     LocalizationService.Get("DriverManagerPathInvalid"));
 
-            if (TryActivateExisting(executablePath))
-                return new(true, executablePath, LocalizationService.Get("DriverManagerActivated"));
+            if (TryActivateExisting(executablePath) is { } existingId)
+                return new(true, executablePath, LocalizationService.Get("DriverManagerActivated"), existingId);
 
             DiagnosticLogger.Info("driver", "manager_launch_requested",
                 ("file", Path.GetFileName(executablePath)),
@@ -54,7 +55,7 @@ internal sealed class DriverManagerLauncher
             using var process = Process.Start(start);
             return process is null
                 ? new(false, executablePath, LocalizationService.Get("DriverManagerProcessStartFailed"))
-                : new(true, executablePath, LocalizationService.Get("DriverManagerStarted"));
+                : new(true, executablePath, LocalizationService.Get("DriverManagerStarted"), process.Id);
         }
         catch (Exception error)
         {
@@ -94,7 +95,22 @@ internal sealed class DriverManagerLauncher
         return Path.IsPathRooted(path) ? path : Path.Combine(workingDirectory, path);
     }
 
-    private static bool TryActivateExisting(string executablePath)
+    internal async Task<DriverManagerLaunchResult> LaunchAndWaitAsync(CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        var result = Launch();
+        if (!result.Success || result.ProcessId is not { } id) return result;
+        try
+        {
+            using var process = Process.GetProcessById(id);
+            // Cancelling setup stops waiting, never an independent driver's installation.
+            await process.WaitForExitAsync(token);
+        }
+        catch (ArgumentException) { /* The window already exited. Recheck actual drivers. */ }
+        return result;
+    }
+
+    private static int? TryActivateExisting(string executablePath)
     {
         foreach (var process in Process.GetProcessesByName(
                      Path.GetFileNameWithoutExtension(ExecutableName)))
@@ -108,7 +124,7 @@ internal sealed class DriverManagerLauncher
                         continue;
                     _ = ShowWindowAsync(process.MainWindowHandle, SwRestore);
                     _ = SetForegroundWindow(process.MainWindowHandle);
-                    return true;
+                    return process.Id;
                 }
                 catch (Exception error)
                 {
@@ -118,7 +134,7 @@ internal sealed class DriverManagerLauncher
                 }
             }
         }
-        return false;
+        return null;
     }
 
     [DllImport("user32.dll")]

@@ -147,7 +147,7 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <ComboBox AutomationProperties.Name="{DynamicResource StreamMicrophone}" x:Name="MicrophoneBox" DisplayMemberPath="Name" SelectedValuePath="Id"
-                                          IsEnabled="{Binding CanStartMediaOutput}"/>
+                                          IsEnabled="{Binding CanStartStreaming}"/>
                                 <Button x:Name="RefreshMicrophonesButton" Grid.Column="1" Margin="8,0,0,0"
                                         Style="{StaticResource IconButton}" ToolTip="{DynamicResource RefreshMicrophones}"
                                         AutomationProperties.Name="{DynamicResource RefreshMicrophones}" Click="OnRefreshMicrophonesClick">
@@ -233,6 +233,12 @@
                            Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource CaptionFontSize}"/>
             </StackPanel>
             <WrapPanel Grid.Row="1" HorizontalAlignment="Right" Margin="0,8,0,0">
+                <Button Content="{DynamicResource StopRecordingOnly}"
+                        Click="OnStopRecordingClick" Style="{StaticResource ToolButton}"
+                        IsEnabled="{Binding CanStopRecording}" Margin="0,0,8,8"/>
+                <Button Content="{DynamicResource StopStreamingOnly}"
+                        Click="OnStopStreamingClick" Style="{StaticResource ToolButton}"
+                        IsEnabled="{Binding CanStopStreaming}" Margin="0,0,8,8"/>
                 <Button Content="{DynamicResource DiscardRecording}"
                         Click="OnDiscardClick" Style="{StaticResource ToolButton}"
                         MinWidth="110" Margin="0,0,8,0"/>

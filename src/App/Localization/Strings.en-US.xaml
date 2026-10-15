@@ -41,6 +41,7 @@
     <system:String x:Key="DeviceBindingModelUnknown">Model information unavailable</system:String>
     <system:String x:Key="DeviceBindingUnnamedDevice">Unnamed device</system:String>
     <system:String x:Key="DeviceBindingCreateFailed">Could not create the device profile.</system:String>
+    <system:String x:Key="DeviceBindingSaveFailed">Device bindings could not be saved. Please try again.</system:String>
     <system:String x:Key="DeviceBindingRenamePrompt">Enter a device profile name</system:String>
     <system:String x:Key="DeviceBindingRenameTitle">Rename device profile</system:String>
     <system:String x:Key="DeviceBindingDeleteConfirmation">Deleting this device profile will remove all bound USB, AirPlay, and Bluetooth identities. Continue?</system:String>
@@ -97,6 +98,9 @@
     <system:String x:Key="UsbControlFailureNotTrusted">This iPhone has not trusted the current Windows account. Keep the phone unlocked, reconnect the cable, and tap “Trust” on the phone.</system:String>
     <system:String x:Key="UsbControlFailureDeviceLocked">The iPhone is locked or waiting for its passcode. Unlock the phone and keep the screen on, complete any Trust This Computer or passcode prompt on the phone, then start reverse control again.</system:String>
     <system:String x:Key="UsbControlFailureDeveloperMode">Developer Mode is not enabled on this device. Turn it on under iPhone/iPad Settings → Privacy &amp; Security → Developer Mode, then restart the device and try again.</system:String>
+    <system:String x:Key="UsbControlDeveloperModeRevealed">The device accepted the request to show the Developer Mode toggle. Enable it under iPhone/iPad Settings → Privacy &amp; Security → Developer Mode, restart and confirm on the device, then click Retry here. If Settings is already open, leave the page and reopen it.</system:String>
+    <system:String x:Key="ControlStageWaitingForDeveloperMode">Enable Developer Mode on your device</system:String>
+    <system:String x:Key="UsbControlFailureDeveloperModeReveal">Could not confirm that the Developer Mode toggle is visible. Unlock the iPhone/iPad, complete Trust This Computer, check the USB connection, and retry. If the toggle is already in Settings, you can enable it manually, restart, and confirm.</system:String>
     <system:String x:Key="UsbControlFailureImageRequired">The device has not mounted the Personalized Developer Disk Image. Mount the official Xcode image matching the device system, then try again.</system:String>
     <system:String x:Key="UsbControlFailureImageDownload">The developer image download failed or timed out. Check the GitHub network connection, or provide an official local image through IPHONE_MIRROR_DDI_DIR.</system:String>
     <system:String x:Key="UsbControlFailureImageCache">The developer image cache could not be saved. Check free space and write permissions on the drive containing your user folder, and ensure security software is not blocking the write before retrying.</system:String>
@@ -292,7 +296,7 @@
     <system:String x:Key="ReverseControlErrorBodyFormat">{0} reverse control encountered an error: {1}</system:String>
     <system:String x:Key="ReverseControlPrerequisiteStatus">Confirm the prerequisites before continuing</system:String>
     <system:String x:Key="ReverseControlPrerequisiteWiredTitle">Before enabling wired control</system:String>
-    <system:String x:Key="ReverseControlPrerequisiteWiredBody" xml:space="preserve">1. Turn on Developer Mode and restart the device.&#xA;2. Connect by USB, unlock it, and tap “Trust This Computer”.&#xA;3. The matching DDI downloads from GitHub on first use.&#xA;4. No input is sent until setup is ready.&#xA;&#xA;Click Continue when ready, or Cancel.</system:String>
+    <system:String x:Key="ReverseControlPrerequisiteWiredBody" xml:space="preserve">1. Connect by USB, unlock the device, and tap “Trust This Computer”.&#xA;2. Click Continue to automatically request the Developer Mode toggle in Settings.&#xA;3. If disabled, follow the instructions to enable it on the device, restart, confirm, then retry here.&#xA;4. The matching DDI downloads from GitHub on first use. No input is sent until setup is ready.&#xA;&#xA;Click Continue once connected and trusted, or Cancel.</system:String>
     <system:String x:Key="ReverseControlPrerequisiteWirelessTitle">Before enabling wireless control</system:String>
     <system:String x:Key="ReverseControlPrerequisiteWirelessBody" xml:space="preserve">1. Turn on Developer Mode and restart the device.&#xA;2. Complete trust and wireless pairing once over USB.&#xA;3. Keep the device unlocked on the same local network.&#xA;4. Allow iPhoneMirror through Windows Firewall.&#xA;&#xA;Click Continue when ready, or Cancel.</system:String>
     <system:String x:Key="BluetoothControlReportMapChangedTitle">Bluetooth control needs to be paired again</system:String>
@@ -532,9 +536,9 @@
     <system:String x:Key="Apply">Apply</system:String>
     <system:String x:Key="AdvancedSettings">Advanced settings</system:String>
     <system:String x:Key="AdvancedSettingsTitle">Advanced USB settings</system:String>
-    <system:String x:Key="AdvancedSettingsIntro">This setting applies only to the selected device and writes the QuickTime USB resolution request directly.</system:String>
+    <system:String x:Key="AdvancedSettingsIntro">This setting applies only to mode B (experimental AirPlay) on the selected USB device.</system:String>
     <system:String x:Key="AdvancedUsbResolution">USB request resolution</system:String>
-    <system:String x:Key="AdvancedUsbResolutionHelp">Enter a value such as 1920×1080. Applying this setting overrides normal preview presets; disabling advanced mode restores them.</system:String>
+    <system:String x:Key="AdvancedUsbResolutionHelp">Enter the panel width and height in pixels, for example width 2048 and height 2732 for a 12.9-inch iPad Pro. The device decides the output size; check the actual resolution. Native preview quality only removes the local rendering size limit.</system:String>
     <system:String x:Key="WidthLabel">Width</system:String>
     <system:String x:Key="HeightLabel">Height</system:String>
     <system:String x:Key="DisableAdvancedMode">Disable advanced mode</system:String>
@@ -758,7 +762,7 @@
     <system:String x:Key="VirtualCameraUninstalled">The virtual camera component was uninstalled.</system:String>
     <system:String x:Key="VirtualCameraUninstallStillDetected">The uninstaller finished, but Windows still detects the virtual camera component.</system:String>
     <system:String x:Key="VirtualCameraUninstallFailedFormat">Could not uninstall the virtual camera component: {0}</system:String>
-    <system:String x:Key="MediaOutputAlreadyRunning">Stop the current media output before starting another one.</system:String>
+    <system:String x:Key="MediaOutputAlreadyRunning">One recording and one live stream can share the same source. Stop the output of the same kind, or stop all outputs before changing the source. Virtual camera output runs separately.</system:String>
     <system:String x:Key="RecordingPendingSave">The previous recording is complete but has not been saved. Choose its location and file name first.</system:String>
     <system:String x:Key="RecordingSavedFormat">Recording saved to: {0}</system:String>
     <system:String x:Key="RecordingSaveFailedFormat">Could not save the recording: {0}</system:String>
@@ -1025,6 +1029,7 @@
     <system:String x:Key="TouchBridgeNotReady">The USB touch bridge is not ready.</system:String>
     <system:String x:Key="ClipboardTextTooLarge">The text is too long to paste at once. Shorten it and try again.</system:String>
     <system:String x:Key="ClipboardPasteFailed">Could not paste to iPhone. Try again.</system:String>
+    <system:String x:Key="RemoteTextClipboardUnavailable">Remote text could not be entered: the device clipboard service is unavailable. Unlock iPhone and reconnect wired or wireless control, then try again.</system:String>
     <system:String x:Key="TouchBridgeInvalidBatch">A touch batch must contain 1 to 5 points.</system:String>
     <system:String x:Key="TouchBridgeInvalidPointId">Touch point IDs must be non-negative integers.</system:String>
     <system:String x:Key="TouchBridgeInvalidCoordinates">Touch coordinates must be finite numbers between 0 and 1.</system:String>
@@ -1589,4 +1594,30 @@ Pair, select and save.</system:String>
     <system:String x:Key="SetupCheckDisplay">Display preferences</system:String>
     <system:String x:Key="SetupCheckRunning">Checking…</system:String>
     <system:String x:Key="SetupCheckWaiting">Waiting</system:String>
+    <system:String x:Key="SetupToolsDriverHint">Install or repair Apple support and USB drivers.</system:String>
+    <system:String x:Key="SetupToolsBindingHint">Manage USB, AirPlay and Bluetooth identities in a dedicated window.</system:String>
+    <system:String x:Key="SetupToolsOpen" xml:space="preserve">Open window  ↗</system:String>
+    <system:String x:Key="SetupToolsReturnHint">Complete the task in its window. Closing it checks the result; you can also continue later.</system:String>
+    <system:String x:Key="SetupToolsDriverWaiting">Continue in Driver Manager. Cancelling this wait does not stop installation.</system:String>
+    <system:String x:Key="SetupToolsBindingWaiting">Select your device and complete the binding in Device Binder.</system:String>
+    <system:String x:Key="SetupToolsChecking">Checking the saved configuration…</system:String>
+    <system:String x:Key="SetupToolsIncomplete">This step is still incomplete. Reopen the tool or continue later.</system:String>
+    <system:String x:Key="SetupToolsBluetoothStarting">Preparing Bluetooth…</system:String>
+    <system:String x:Key="SetupToolsReceiverStarting">Preparing the AirPlay receiver…</system:String>
+    <system:String x:Key="DeviceBindingWorkspaceHint">One profile for each iPhone. Keep every connection linked to the right device.</system:String>
+    <system:String x:Key="DeviceBindingSidebarHint">USB devices get a profile automatically. Use + to add an AirPlay device.</system:String>
+    <system:String x:Key="DeviceBindingEmptyList">No devices yet</system:String>
+    <system:String x:Key="DeviceBindingEmptyTitle">Connect your first iPhone</system:String>
+    <system:String x:Key="DeviceBindingEmptyHint">Connect and unlock your iPhone, then tap Trust. Or start AirPlay, select Screen Mirroring on your phone, and add the device.</system:String>
+    <system:String x:Key="DeviceBindingStartAirPlay">Start AirPlay receiver</system:String>
+    <system:String x:Key="DeviceBindingAirPlayReady">AirPlay is ready. Open Screen Mirroring in Control Center and select this computer.</system:String>
+    <system:String x:Key="DeviceBindingSavedFeedback">Binding saved</system:String>
+    <system:String x:Key="DeviceBindingWiredBrief">Connect and unlock your iPhone, then tap Trust on the phone.</system:String>
+    <system:String x:Key="DeviceBindingAirPlayBrief">On the same Wi-Fi, open Screen Mirroring and select this computer.</system:String>
+    <system:String x:Key="DeviceBindingBluetoothBrief">Pair via Bluetooth and enable AssistiveTouch to control your iPhone.</system:String>
+    <system:String x:Key="DeviceBindingDeletedFeedback">Device profile deleted</system:String>
+    <system:String x:Key="DeviceBindingUnboundFeedback">Binding removed</system:String>
+    <system:String x:Key="StopRecordingOnly">Stop recording</system:String>
+    <system:String x:Key="StopStreamingOnly">Stop live stream</system:String>
+    <system:String x:Key="MediaOutputRecordingAndStreaming">Recording and streaming</system:String>
 </ResourceDictionary>

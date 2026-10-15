@@ -288,8 +288,6 @@ internal sealed class NativeCore : IDisposable
     private bool _initialized;
     private byte[]? _frameBuffer;
     private byte[]? _outputFrameBuffer;
-    private byte[]? _outputNv12FrameBuffer;
-    private byte[]? _outputAudioBuffer;
 
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
     private static extern int im_initialize();
@@ -1156,65 +1154,15 @@ internal sealed class NativeCore : IDisposable
     }
 
     internal Nv12VideoFrame? GetDeviceOutputNv12Frame(NativeSessionHandle? handle, uint width,
-        uint height)
-    {
-        if (handle is null || handle.IsInvalid) return null;
-        bool added = false;
-        handle.DangerousAddRef(ref added);
-        try
-        {
-        var info = new NativeVideoFrameInfo
-        {
-            StructSize = (uint)Marshal.SizeOf<NativeVideoFrameInfo>(),
-        };
-        uint size = (uint)(_outputNv12FrameBuffer?.Length ?? 0);
-        var result = im_session_copy_latest_video_frame_nv12(handle.RawHandle, ref info,
-            _outputNv12FrameBuffer, ref size, width, height);
-        if (result == (int)NativeResult.BufferTooSmall)
-        {
-            _outputNv12FrameBuffer = new byte[size];
-            info.StructSize = (uint)Marshal.SizeOf<NativeVideoFrameInfo>();
-            result = im_session_copy_latest_video_frame_nv12(handle.RawHandle, ref info,
-                _outputNv12FrameBuffer, ref size, width, height);
-        }
-        if (result != 0 || _outputNv12FrameBuffer is null ||
-            info.PixelFormat != 2)
-            return null;
-        return new Nv12VideoFrame(info.Width, info.Height, info.Stride,
-            info.Timestamp100Ns, _outputNv12FrameBuffer);
-        }
-        finally { if (added) handle.DangerousRelease(); }
-    }
+        uint height) => CreateOutputReader().GetVideoFrame(handle, width, height);
 
     internal AudioPacket? GetDeviceOutputAudioPacket(NativeSessionHandle? handle,
-        ulong afterSequence)
-    {
-        if (handle is null || handle.IsInvalid) return null;
-        bool added = false;
-        handle.DangerousAddRef(ref added);
-        try
-        {
-        var info = new NativeAudioPacketInfo
-        {
-            StructSize = (uint)Marshal.SizeOf<NativeAudioPacketInfo>(),
-        };
-        uint size = (uint)(_outputAudioBuffer?.Length ?? 0);
-        var result = im_session_copy_next_audio_packet(handle.RawHandle, afterSequence,
-            ref info, _outputAudioBuffer, ref size);
-        if (result == (int)NativeResult.BufferTooSmall)
-        {
-            _outputAudioBuffer = new byte[size];
-            info.StructSize = (uint)Marshal.SizeOf<NativeAudioPacketInfo>();
-            result = im_session_copy_next_audio_packet(handle.RawHandle, afterSequence,
-                ref info, _outputAudioBuffer, ref size);
-        }
-        if (result == (int)NativeResult.CaptureBackendUnavailable) return null;
-        if (result != 0 || _outputAudioBuffer is null || size == 0) return null;
-        return new AudioPacket(info.Sequence, info.SampleRate, info.Channels,
-            info.BitsPerSample, _outputAudioBuffer.AsSpan(0, checked((int)size)).ToArray());
-        }
-        finally { if (added) handle.DangerousRelease(); }
-    }
+        ulong afterSequence) => CreateOutputReader().GetAudioPacket(handle, afterSequence);
+
+    // A retained reader belongs to one output. The convenience methods above
+    // return owned snapshots for callers that do not retain a reader.
+    internal NativeOutputReader CreateOutputReader() => new(
+        im_session_copy_latest_video_frame_nv12, im_session_copy_next_audio_packet);
 
     private static string GetLastError(string fallback)
     {
@@ -1227,5 +1175,71 @@ internal sealed class NativeCore : IDisposable
         if (!_initialized) return;
         im_shutdown();
         _initialized = false;
+    }
+}
+
+// One video producer and one audio producer per reader. Video bytes may be
+// reused by the next video read on this reader; copy them into the output's
+// FrameLatch before that next read. Other readers never touch these buffers.
+internal sealed class NativeOutputReader(NativeOutputReader.CopyVideo copyVideo,
+    NativeOutputReader.CopyAudio copyAudio)
+{
+    internal delegate int CopyVideo(ulong handle, ref NativeVideoFrameInfo info,
+        byte[]? buffer, ref uint size, uint width, uint height);
+    internal delegate int CopyAudio(ulong handle, ulong afterSequence,
+        ref NativeAudioPacketInfo info, byte[]? buffer, ref uint size);
+    private byte[]? _videoBuffer;
+    private byte[]? _audioBuffer;
+
+    internal Nv12VideoFrame? GetVideoFrame(NativeSessionHandle? handle, uint width, uint height)
+    {
+        if (handle is null || handle.IsClosed || handle.IsInvalid) return null;
+        bool added = false;
+        handle.DangerousAddRef(ref added);
+        try
+        {
+            var info = new NativeVideoFrameInfo
+            {
+                StructSize = (uint)Marshal.SizeOf<NativeVideoFrameInfo>(),
+            };
+            uint size = (uint)(_videoBuffer?.Length ?? 0);
+            var result = copyVideo(handle.RawHandle, ref info, _videoBuffer, ref size, width, height);
+            if (result == (int)NativeResult.BufferTooSmall)
+            {
+                _videoBuffer = new byte[size];
+                info.StructSize = (uint)Marshal.SizeOf<NativeVideoFrameInfo>();
+                result = copyVideo(handle.RawHandle, ref info, _videoBuffer, ref size, width, height);
+            }
+            if (result != 0 || _videoBuffer is null || info.PixelFormat != 2) return null;
+            return new Nv12VideoFrame(info.Width, info.Height, info.Stride,
+                info.Timestamp100Ns, _videoBuffer);
+        }
+        finally { if (added) handle.DangerousRelease(); }
+    }
+
+    internal AudioPacket? GetAudioPacket(NativeSessionHandle? handle, ulong afterSequence)
+    {
+        if (handle is null || handle.IsClosed || handle.IsInvalid) return null;
+        bool added = false;
+        handle.DangerousAddRef(ref added);
+        try
+        {
+            var info = new NativeAudioPacketInfo
+            {
+                StructSize = (uint)Marshal.SizeOf<NativeAudioPacketInfo>(),
+            };
+            uint size = (uint)(_audioBuffer?.Length ?? 0);
+            var result = copyAudio(handle.RawHandle, afterSequence, ref info, _audioBuffer, ref size);
+            if (result == (int)NativeResult.BufferTooSmall)
+            {
+                _audioBuffer = new byte[size];
+                info.StructSize = (uint)Marshal.SizeOf<NativeAudioPacketInfo>();
+                result = copyAudio(handle.RawHandle, afterSequence, ref info, _audioBuffer, ref size);
+            }
+            if (result != 0 || _audioBuffer is null || size == 0) return null;
+            return new AudioPacket(info.Sequence, info.SampleRate, info.Channels,
+                info.BitsPerSample, _audioBuffer.AsSpan(0, checked((int)size)).ToArray());
+        }
+        finally { if (added) handle.DangerousRelease(); }
     }
 }

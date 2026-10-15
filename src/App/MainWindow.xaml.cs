@@ -410,6 +410,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         Deactivated += OnMainKeyboardDeactivated;
         Activated += OnMainKeyboardActivated;
         PreviewGotKeyboardFocus += OnMainKeyboardFocusChanged;
+        PreviewTextInput += OnRemoteTextInput;
         SizeChanged += OnWorkspaceWindowSizeChanged;
         IsVisibleChanged += OnWorkspaceWindowVisibilityChanged;
         Unloaded += OnWorkspaceUnloaded;
@@ -1401,7 +1402,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             ("scan_code", e.ScanCode), ("active_window", _activeControlWindow),
             ("selected_device", AppLog.Device(_viewModel.SelectedDevice?.Udid))));
         if (_activeControlWindow != 0) return;
-        if (_rawKeyboardInputEnabled && e.Kind != Controls.PreviewKeyboardKind.Reset) return;
+        if (_rawKeyboardInputEnabled && e.Kind is not (Controls.PreviewKeyboardKind.Reset or Controls.PreviewKeyboardKind.Text)) return;
         HandleControlKeyboardInput(e, _viewModel.SelectedDevice?.Udid);
     }
 
@@ -1409,6 +1410,14 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         Controls.PreviewKeyboardEventArgs e, string? sourceUdid = null,
         bool fromRawInput = false, nint? sourceWindow = null)
     {
+        if (e.Kind == Controls.PreviewKeyboardKind.Text)
+        {
+            var target = sourceUdid ?? ActiveInputDeviceUdid;
+            if (DeviceViewModel.UdidEquals(target, ActiveInputDeviceUdid) &&
+                CanForwardControlKeyboard(target, sourceWindow ?? _windowSource?.Handle ?? 0))
+                TryQueueControlText(e.Text ?? string.Empty);
+            return;
+        }
         if (e.Kind == Controls.PreviewKeyboardKind.Reset)
         {
             DispatchControlKeyboardInput(e, sourceUdid, fromRawInput, sourceWindow);

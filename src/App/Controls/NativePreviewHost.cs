@@ -368,6 +368,11 @@ internal sealed class NativePreviewHost : HwndHost
                         (int)(((long)lParam >> 16) & 0x1FF)));
                     handled = true;
                     return 0;
+                case 0x0102 when (((long)lParam >> 16) & 0xFF) == 0: // Posted WM_CHAR (no physical scan code).
+                    KeyboardInput?.Invoke(this, new PreviewKeyboardEventArgs(
+                        PreviewKeyboardKind.Text, 0) { Text = ((char)wParam).ToString() });
+                    handled = true;
+                    return 0;
                 case 0x0101: // WM_KEYUP
                 case 0x0105: // WM_SYSKEYUP
                     KeyboardInput?.Invoke(this, new PreviewKeyboardEventArgs(
@@ -531,7 +536,7 @@ internal sealed class PreviewPointerEventArgs : EventArgs
     internal uint SourceHeight { get; }
     internal int Rotation { get; }
 }
-internal enum PreviewKeyboardKind { Down, Up, Reset }
+internal enum PreviewKeyboardKind { Down, Up, Reset, Text }
 internal sealed class PreviewKeyboardEventArgs : EventArgs
 {
     internal PreviewKeyboardEventArgs(PreviewKeyboardKind kind, int virtualKey,
@@ -539,4 +544,5 @@ internal sealed class PreviewKeyboardEventArgs : EventArgs
     internal PreviewKeyboardKind Kind { get; }
     internal int VirtualKey { get; }
     internal int ScanCode { get; }
+    internal string? Text { get; init; }
 }

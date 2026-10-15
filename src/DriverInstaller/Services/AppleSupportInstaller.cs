@@ -144,6 +144,8 @@ internal sealed class AppleSupportInstaller(DeviceCatalog catalog)
                 ("operation", operationId), ("elapsed_ms", timer.ElapsedMilliseconds));
             return new AppleSupportInstallResult(true, false, current.Diagnostic);
         }
+        if (current.HasMuxConflict)
+            return new AppleSupportInstallResult(false, false, current.Diagnostic);
         if (ShouldRecoverExistingService(current))
         {
             ReportProgress(progress, "AppleSupportStartingService");
@@ -163,6 +165,11 @@ internal sealed class AppleSupportInstaller(DeviceCatalog catalog)
                     return new AppleSupportInstallResult(true, false, current.Diagnostic);
                 }
             }
+            // A listener may appear during service startup. Do not reinstall
+            // Apple components to fix a port already owned by another process.
+            current = catalog.InspectAppleSupport();
+            if (current.Ready || current.HasMuxConflict)
+                return new AppleSupportInstallResult(current.Ready, false, current.Diagnostic);
         }
 
         DriverPayload.CreateSafeDirectory(DriverConstants.PackagesRoot);
@@ -303,7 +310,8 @@ internal sealed class AppleSupportInstaller(DeviceCatalog catalog)
             ("elapsed_ms", timer.ElapsedMilliseconds));
 
         return new AppleSupportInstallResult(false, false,
-            DriverLocalization.Format("AppleServiceNotReady", packageLog));
+            ready.HasMuxConflict ? ready.Diagnostic :
+                ready.Diagnostic + "\n" + DriverLocalization.Format("AppleServiceNotReady", packageLog));
     }
 
     internal void OpenMicrosoftStore()
@@ -327,6 +335,13 @@ internal sealed class AppleSupportInstaller(DeviceCatalog catalog)
         {
             polls++;
             status = catalog.InspectAppleSupport(writeLog: false);
+            if (status.HasMuxConflict)
+            {
+                DriverLogger.WriteWarning("apple-support", "wait_mux_conflict",
+                    ("operation", operationId), ("mux_listener", status.MuxListener),
+                    ("elapsed_ms", timer.ElapsedMilliseconds));
+                return status;
+            }
             if (status.Ready)
             {
                 DriverLogger.WriteEvent("apple-support", "wait_ready",
@@ -377,9 +392,11 @@ internal sealed class AppleSupportInstaller(DeviceCatalog catalog)
     }
 
     internal static bool ShouldInstallAppleDevicesFromStore(AppleSupportStatus status) =>
-        !status.UsbDriverInstalled || !status.ServiceInstalled;
+        !status.Ready && !status.HasMuxConflict &&
+        (!status.UsbDriverInstalled || (!status.ServiceInstalled && !status.MuxAvailable));
 
     internal static bool ShouldRecoverExistingService(AppleSupportStatus status) =>
+        !status.Ready && !status.HasMuxConflict &&
         status.UsbDriverInstalled && status.ServiceInstalled &&
         !status.ServiceRunning && status.ServiceName is not null;
 
@@ -392,7 +409,7 @@ internal sealed class AppleSupportInstaller(DeviceCatalog catalog)
     {
         var status = await WaitForAppleSupportAsync(timeout, operationId,
             returnWhenServiceCanBeRecovered: true);
-        if (status.Ready || !status.ServiceInstalled || status.ServiceRunning ||
+        if (status.Ready || status.HasMuxConflict || !status.ServiceInstalled || status.ServiceRunning ||
             status.ServiceName is null)
             return (status, null);
 

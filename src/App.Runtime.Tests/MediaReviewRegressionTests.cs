@@ -30,6 +30,7 @@ internal static partial class Program
         foreach (var target in new[] { 55d, 65d })
             TestExplicitHlsSeek(target);
         TestHlsStartupSeekCoalescing();
+        TestParallelMediaOutputUi();
         Console.WriteLine("Media review regressions passed: HTTP headers, source replacement, explicit seeks, startup synchronization and recording request.");
     }
 

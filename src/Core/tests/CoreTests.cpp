@@ -11,6 +11,7 @@
 #include "Transport/LibUsb0Readiness.h"
 #include "Transport/QtUsbTransport.h"
 #include "Capture/CaptureSession.h"
+#include "Capture/UsbDisplaySize.h"
 #include "Capture/WirelessCaptureSession.h"
 #include "Device/AppleUsbDiscovery.h"
 #include "Device/DeviceManager.h"
@@ -589,6 +590,40 @@ void test_session_protocol() {
 
 void test_usb_projection_modes() {
     using namespace iPhoneMirror::capture;
+
+    // Issue #54: all 2018 12.9-inch storage/radio variants must request their
+    // actual panel, not the generic Air-size fallback. Also cover #55's iPad.
+    for (const auto model : {L"iPad8,5", L"iPad8,6", L"iPad8,7", L"iPad8,8", L"iPad13,11"}) {
+        const auto panel = native_display_size(model);
+        check(panel.model_known && panel.width == 2048 && panel.height == 2732,
+            "12.9-inch iPad Pro resolves to its native portrait panel");
+        for (const auto mode : {UsbProjectionMode::Demo, UsbProjectionMode::AirPlay}) {
+            const auto config = make_usb_display_configuration(mode, panel.width, panel.height);
+            check(config.session_options.requested_width == 2048 &&
+                config.session_options.requested_height == 2732,
+                "both native-sized modes preserve the iPad Pro panel request");
+            check(contains_ascii(initial_hpd1(config.session_options), "DisplaySize"),
+                "iPad native request still includes DisplaySize required to start video");
+        }
+    }
+    const auto air = native_display_size(L"iPad13,17");
+    check(air.model_known && air.width == 1640 && air.height == 2360,
+        "cellular iPad Air 5 is explicitly mapped");
+    const auto pro11 = native_display_size(L"iPad8,4");
+    check(pro11.width == 1668 && pro11.height == 2388,
+        "11-inch and 12.9-inch models in the iPad8 family stay distinct");
+    const auto mini = native_display_size(L"iPad14,2");
+    check(mini.width == 1488 && mini.height == 2266, "iPad mini uses its own aspect ratio");
+    const auto proM4 = native_display_size(L"iPad16,6");
+    check(proM4.width == 2064 && proM4.height == 2752, "13-inch M4 has a different panel");
+    for (const auto model : {L"iPad99,1", L"iPad8,50"}) {
+        const auto fallback = native_display_size(model);
+        check(!fallback.model_known && fallback.width == 1640 && fallback.height == 2360,
+            "unknown iPads use a fallback without claiming it is native");
+    }
+    const auto phone = native_display_size(L"iPhone13,1");
+    check(phone.model_known && phone.width == 1080 && phone.height == 2340,
+        "verified iPhone request is unchanged");
 
     const auto demo = make_usb_display_configuration(
         UsbProjectionMode::Demo, 1206, 2622);

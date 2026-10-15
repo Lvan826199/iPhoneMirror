@@ -94,7 +94,7 @@ internal static class SegmentedHttpDownloader
         }
         catch (RangeNotSupportedException)
         {
-            TryDelete(destination);
+            // DownloadSegmentsAsync has already removed its own partial file.
             return await DownloadSingleAsync(client, resolvedUri, destination, options,
                 isTrustedFinalUri, progress, cancellationToken, responseReceived);
         }
@@ -144,11 +144,13 @@ internal static class SegmentedHttpDownloader
         if (totalBytes is > 0) ValidateTotalBytes(totalBytes.Value, options);
 
         await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var created = false;
         try
         {
             await using var output = new FileStream(destination, FileMode.CreateNew,
                 FileAccess.Write, FileShare.None, options.BufferSize,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
+            created = true;
             var buffer = ArrayPool<byte>.Shared.Rent(options.BufferSize);
             try
             {
@@ -178,7 +180,7 @@ internal static class SegmentedHttpDownloader
         }
         catch
         {
-            TryDelete(destination);
+            if (created) TryDelete(destination);
             throw;
         }
     }
@@ -195,11 +197,13 @@ internal static class SegmentedHttpDownloader
         CancellationToken cancellationToken,
         Action<Uri, HttpResponseMessage>? responseReceived)
     {
+        var created = false;
         try
         {
             await using var output = new FileStream(destination, FileMode.CreateNew,
                 FileAccess.Write, FileShare.Read, options.BufferSize,
                 FileOptions.Asynchronous | FileOptions.RandomAccess);
+            created = true;
             output.SetLength(totalBytes);
             var handle = output.SafeFileHandle;
             var segmentSize = 1 + ((totalBytes - 1) / segmentCount);
@@ -259,7 +263,7 @@ internal static class SegmentedHttpDownloader
         }
         catch
         {
-            TryDelete(destination);
+            if (created) TryDelete(destination);
             throw;
         }
     }

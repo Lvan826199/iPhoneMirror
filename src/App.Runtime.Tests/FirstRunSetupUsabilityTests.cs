@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
@@ -17,7 +17,7 @@ internal static partial class Program
     {
         var store = new FirstRunSetupStore(Path.Combine(output, "usability-checkpoint.json"));
         store.Save(new() { Disposition = SetupDisposition.InProgress, Step = SetupStep.WirelessBackend });
-        var window = new FirstRunSetupWindow(vm, store, checkOnOpen: false);
+        var window = new FirstRunSetupWindow(vm, store);
         object? Call(string method, params object[] args) => typeof(FirstRunSetupWindow)
             .GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)!.Invoke(window, args);
         Button Button(string name) => (Button)window.FindName(name);
@@ -60,7 +60,7 @@ internal static partial class Program
             foreach (var step in new[] { SetupStep.Wireless, SetupStep.Bluetooth })
             {
                 Render(step);
-                check(Button("Next").IsEnabled && ActionButton("SetupConfigureAgain").IsVisible,
+                check(Button("Next").IsEnabled && ComponentVisuals<Button>(window).Any(b => System.Windows.Automation.AutomationProperties.GetName(b) == LocalizationService.Get("DeviceBindingTitle")),
                     "Returning to a saved binding forced configuration again: " + step);
             }
             complete((Task)Call("AdvanceAsync")!);
@@ -79,15 +79,17 @@ internal static partial class Program
             check(!Button("Next").IsEnabled, "Deleted wired profile still accepted its Bluetooth checkpoint.");
 
             Render(SetupStep.Environment);
-            check(!ActionButton("SetupInstall").IsVisible && ActionButton("SetupRetry").IsVisible, "Environment page offered installation before checking.");
-            window.PrepareDevice = (_, _, _, _) => Task.FromResult(new SetupDriverProgress("Result", false, null));
+            var opens = 0;
+            window.OpenDriverToolAsync = _ => { opens++; return Task.FromResult(new DriverManagerLaunchResult(true, null, "test")); };
+            check(!ComponentVisuals<Button>(window).Any(b => Equals(b.Content, LocalizationService.Get("SetupInstall"))), "Assistant still exposes inline installation.");
+            window.PrepareDevice = (_, install, _, _) => { check(!install, "Assistant requested driver installation."); return Task.FromResult(new SetupDriverProgress("Result", false, null)); };
             complete((Task)Call("RunAsync", false)!); window.UpdateLayout();
-            check(ActionButton("SetupInstall").IsVisible && !Button("Next").IsEnabled, "Missing environment did not offer installation.");
+            check(opens == 1 && !Button("Next").IsEnabled, "Closing the driver manager was treated as proof of success.");
             var prepares = 0;
             window.PrepareDevice = (_, install, _, _) => { check(!install, "Retry unexpectedly installed drivers."); prepares++; return Task.FromResult(new SetupDriverProgress("Result", true, null)); };
-            ActionButton("SetupRetry").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            complete((Task)Call("RunAsync", false)!);
             pump(50); window.UpdateLayout();
-            check(prepares == 1 && !ActionButton("SetupInstall").IsVisible && Button("Next").IsEnabled, "Healthy environment still offered unnecessary installation.");
+            check(opens == 2 && prepares == 1 && Button("Next").IsEnabled, "Verified driver manager result did not enable continuation.");
 
             Render(SetupStep.Connection);
             window.DiscoverDevices = _ => Task.FromResult(new SetupDriverProgress("Result", true, null, [new("connected", "iPhone")]));

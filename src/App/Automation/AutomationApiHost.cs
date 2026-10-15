@@ -14,7 +14,8 @@ using IPhoneMirror.App.Services.Automation;
 
 namespace IPhoneMirror.App.Automation;
 
-internal sealed class AutomationApiHost(AutomationService service) : IAsyncDisposable
+internal sealed class AutomationApiHost(AutomationService service,
+    Func<string, string?, bool, CancellationToken, Task<object>>? management = null) : IAsyncDisposable
 {
     private WebApplication? _app;
     private int _accepting;
@@ -123,6 +124,25 @@ internal sealed class AutomationApiHost(AutomationService service) : IAsyncDispo
             }
             app.MapGet("/api/docs", () => Results.Content(AutomationOpenApi.Docs, "text/html; charset=utf-8"));
             app.MapGet("/api/v1/openapi.json", () => Results.Json(AutomationOpenApi.Document()));
+            app.MapGet("/api/v1/app/status", async (HttpContext c) =>
+            {
+                Permission("device.read");
+                if (management is null) throw new AutomationException("UNSUPPORTED_RUNTIME", "Application management is unavailable.", 501);
+                return Results.Json(await management("status", null, false, c.RequestAborted));
+            });
+            app.MapPost("/api/v1/devices/{id}/prepare", async (string id, HttpContext c) =>
+            {
+                Permission("device.control", "screen.capture");
+                var request = await ReadAsync<PrepareRequest>(c);
+                if (management is null) throw new AutomationException("UNSUPPORTED_RUNTIME", "Application management is unavailable.", 501);
+                return Results.Json(await management("prepare", id, request.EnableControl, c.RequestAborted));
+            });
+            app.MapPost("/api/v1/devices/{id}/window/open", async (string id, HttpContext c) =>
+            {
+                Permission("device.control", "screen.capture");
+                if (management is null) throw new AutomationException("UNSUPPORTED_RUNTIME", "Application management is unavailable.", 501);
+                return Results.Json(await management("window", id, false, c.RequestAborted));
+            });
             app.MapGet("/api/v1/devices", async (HttpContext c) =>
             { Permission("device.read"); return Results.Json(new { devices = await service.DevicesAsync(c.RequestAborted) }); });
             app.MapGet("/api/v1/devices/{id}", async (string id, HttpContext c) =>
@@ -224,6 +244,7 @@ internal sealed class AutomationApiHost(AutomationService service) : IAsyncDispo
         await context.Response.WriteAsJsonAsync(new { error = new { code = error.Code, message = error.Message }, requestId = context.TraceIdentifier }, context.RequestAborted);
     }
     private sealed record AcquireRequest(int DurationSeconds = 30);
+    private sealed record PrepareRequest(bool EnableControl = true);
     private sealed record TextRequest(string? Text);
     private sealed class TokenBucket(int rate, int burst)
     {

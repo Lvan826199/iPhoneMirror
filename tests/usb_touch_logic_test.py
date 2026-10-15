@@ -521,7 +521,7 @@ class TestDeveloperEnvironmentPreflight(unittest.IsolatedAsyncioTestCase):
         async def emit(self, event):
             self.events.append(event)
 
-    async def test_requires_developer_mode_before_opening_image_mounter(self):
+    async def test_wireless_requires_developer_mode_without_revealing_toggle(self):
         import usb_touch_bridge as bridge
 
         class Lockdown:
@@ -529,7 +529,7 @@ class TestDeveloperEnvironmentPreflight(unittest.IsolatedAsyncioTestCase):
                 return False
 
         ipc = self.Ipc()
-        session = bridge.TouchSession(ipc, 120)
+        session = bridge.TouchSession(ipc, 120, transport='wireless')
         with self.assertRaises(bridge.BridgePrerequisiteError) as raised:
             await session._preflight_developer_environment(Lockdown())
 

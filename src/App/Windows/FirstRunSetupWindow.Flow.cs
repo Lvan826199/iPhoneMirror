@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -227,14 +227,19 @@ public partial class FirstRunSetupWindow
 
     private bool HasSavedBinding()
     {
-        if (!_smartSetup && _state.Outcomes.GetValueOrDefault(_state.Step) != SetupOutcome.Verified) return false;
         if (_smartSetup && _activeTask?.Checks.Any(c => c.NeedsAttention) == true) return false;
         var saved = ReadBindings();
         if (_state.Usage == SetupUsage.WirelessOnly)
             return _state.Step == SetupStep.Wireless && _state.Devices.Count > 0 && _state.Devices.All(d =>
                 saved.FindByIdentity(DeviceIdentityType.AirPlay, d.Id) is not null);
         var profile = _state.CurrentDevice is { } device ? saved.FindByIdentity(DeviceIdentityType.Wired, device.Id) : null;
-        return _state.Step == SetupStep.Wireless ? profile?.AirPlayIdentity is not null : profile?.BluetoothIdentity is not null;
+        return _state.Step switch
+        {
+            SetupStep.Profile => profile is not null,
+            SetupStep.Wireless => profile?.AirPlayIdentity is not null,
+            SetupStep.Bluetooth => profile?.BluetoothIdentity is not null,
+            _ => false
+        };
     }
 
     private Task ValidateAsync(CancellationToken token)

@@ -47,6 +47,7 @@ hiddenimports += [
     'pymobiledevice3.remote.common',
     'pymobiledevice3.remote.module_imports',
     'pymobiledevice3.lockdown',
+    'pymobiledevice3.services.cryptexd',
     'pmd_pytcp',
     'pytun_pmd3',
     'pytun_pmd3.wintun',

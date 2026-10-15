@@ -72,7 +72,7 @@ internal static partial class Program
         var assembly = typeof(App).Assembly;
         var tempBindings = Path.Combine(Path.GetTempPath(), $"keyboard-focus-{Guid.NewGuid():N}.json");
         var bindingsType = assembly.GetType("IPhoneMirror.App.Services.DeviceBindingManager", true)!;
-        var bindings = Activator.CreateInstance(bindingsType, KeyboardTestMembers, null, [tempBindings], null)!;
+        var bindings = Activator.CreateInstance(bindingsType, KeyboardTestMembers, null, [tempBindings, false], null)!;
         KeyboardCall(bindings, "CreateProfileFromIdentity", "Keyboard test",
             Enum.Parse(assembly.GetType("IPhoneMirror.App.Services.DeviceIdentityType")!, "Wired"), udid, null);
         var resolverType = assembly.GetType("IPhoneMirror.App.Services.DeviceIdentityResolver", true)!;
@@ -168,9 +168,16 @@ internal static partial class Program
         window.Activated -= activated;
         window.Deactivated -= deactivated;
         window.PreviewGotKeyboardFocus -= keyboardFocus;
+        var previousFocusedWindow = KeyboardField(window, "_keyboardFocusedWindow");
+        // Match both Win32 focus snapshots in this synthetic fixture. Otherwise
+        // a native preview focused by an earlier integration test overrides the
+        // settings-editor scenario even though no native focus is simulated here.
+        SetKeyboardField(window, "_keyboardFocusedWindow", (Func<nint>)(() =>
+            ((Func<nint>)KeyboardField(window, "_keyboardForegroundWindow"))()));
         try { TestKeyboardFocusRoute(window, other, udid, packets, verifyPackets); }
         finally
         {
+            SetKeyboardField(window, "_keyboardFocusedWindow", previousFocusedWindow);
             window.Activated += activated;
             window.Deactivated += deactivated;
             window.PreviewGotKeyboardFocus += keyboardFocus;
@@ -382,6 +389,7 @@ internal static partial class Program
             Require(ReadPackets().All(p => p.Length == 0), "Expired shortcut/paste reached the writer.");
         }
         TestKeyboardHotkeyScope(window, other, udid, Focus);
+        TestRemoteTextInput(window, other, packets, Focus, verifyPackets);
     }
 
     private static void TestKeyboardInputModeArbitration(MainWindow window, string udid,

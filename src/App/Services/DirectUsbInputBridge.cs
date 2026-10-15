@@ -14,6 +14,12 @@ namespace IPhoneMirror.App.Services;
 public sealed record BridgeEvent(string Event, string? Code, string? Message, string? Text = null,
     long? ClipboardReadId = null);
 
+internal sealed class BridgeUserActionRequiredException(string code, string message)
+    : InvalidOperationException(message)
+{
+    internal string Code { get; } = code;
+}
+
 public sealed record TouchPoint(
     [property: JsonPropertyName("pointerId")] int PointerId,
     [property: JsonPropertyName("action")] string Action,
@@ -541,6 +547,15 @@ public sealed partial class DirectUsbInputBridge : IAsyncDisposable
                     OnEvent?.Invoke(new BridgeEvent(evt, null, null,
                         root.TryGetProperty("text", out var ct) ? ct.GetString() : null,
                         root.TryGetProperty("readId", out var readId) ? readId.GetInt64() : null));
+                    break;
+                case "user_action_required":
+                    Interlocked.Exchange(ref _terminalEventReceived, 1);
+                    IsReady = false;
+                    GateOpen = false;
+                    var actionCode = root.GetProperty("code").GetString()!;
+                    var actionMessage = root.GetProperty("message").GetString()!;
+                    OnEvent?.Invoke(new BridgeEvent(evt, actionCode, actionMessage));
+                    _readySignal?.TrySetException(new BridgeUserActionRequiredException(actionCode, actionMessage));
                     break;
                 case "error":
                     _lastFailureDiagnostic = line;

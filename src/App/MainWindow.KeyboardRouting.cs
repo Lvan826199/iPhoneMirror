@@ -100,9 +100,16 @@ public partial class MainWindow
 
     private bool ProcessKeyboardHook(LowLevelKeyboardData data, nint message)
     {
-        if ((data.Flags & 0x12) != 0) return false;
+        // Ignore our own shortcut replay, but allow remote desktop SendInput.
+        if (data.ExtraInformation == KeyboardReplayTag) return false;
         var down = message is 0x100 or 0x104;
         if (!down && message is not (0x101 or 0x105)) return false;
+        if (data.VirtualKey == 0xE7) // VK_PACKET: ScanCode is a UTF-16 code unit.
+            return TryQueueControlText(down ? ((char)data.ScanCode).ToString() : string.Empty);
+        if ((data.Flags & 0x12) != 0 &&
+            !CanForwardControlKeyboard(ActiveInputDeviceUdid, GetControlKeyboardWindow(ActiveInputDeviceUdid)))
+            return false;
+        FlushControlText();
         var scan = (int)data.ScanCode;
         var extended = (data.Flags & 1) != 0;
         var key = new MappedKey(ModifierKeyIdentity((int)data.VirtualKey, scan | (extended ? 0x100 : 0)), scan, extended);
@@ -163,6 +170,7 @@ public partial class MainWindow
         {
             Type = 1, VirtualKey = (ushort)key.VirtualKey, Scan = (ushort)key.ScanCode,
             Flags = (key.Extended ? 1u : 0) | (down ? 0u : 2u),
+            ExtraInformation = KeyboardReplayTag,
         };
         if (RouterSendInput(1, [input], Marshal.SizeOf<RouterNativeInput>()) != 1)
             DiagnosticLogger.ReverseControlWarning("keyboard_input", "replay_failed", ("error", Marshal.GetLastWin32Error()));
@@ -174,7 +182,9 @@ public partial class MainWindow
         [FieldOffset(8)] internal ushort VirtualKey;
         [FieldOffset(10)] internal ushort Scan;
         [FieldOffset(12)] internal uint Flags;
+        [FieldOffset(24)] internal nint ExtraInformation;
     }
+    private static readonly nint KeyboardReplayTag = (nint)0x49504D52;
     [DllImport("user32.dll", EntryPoint = "SendInput", SetLastError = true)]
     private static extern uint RouterSendInput(uint count, RouterNativeInput[] inputs, int size);
 }

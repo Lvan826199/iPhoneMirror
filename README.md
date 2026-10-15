@@ -443,6 +443,7 @@ iPhone/iPad
 - [文档总索引](docs/README.md)
 - [开发与测试指南](docs/DEVELOPMENT.md)
 - [软件架构](docs/ARCHITECTURE.md)
+- [自动化控制与调试：本地 HTTP API](docs/api/README.md)
 - [D3D11 渲染](docs/D3D11_RENDERING.md)
 - [设备圆角配置](docs/DEVICE_CORNER_PROFILES.md)
 - [音频输出](docs/WASAPI_AUDIO.md)

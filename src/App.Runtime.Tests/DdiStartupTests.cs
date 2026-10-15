@@ -50,6 +50,8 @@ internal static partial class Program
             ["developer_mode_check_failed"] = "UsbControlFailureDeveloperModeCheck",
             ["developer_mode_check_timeout"] = "UsbControlFailureDeveloperModeCheck",
             ["developer_mode_required"] = "UsbControlFailureDeveloperMode",
+            ["developer_mode_reveal_failed"] = "UsbControlFailureDeveloperModeReveal",
+            ["developer_mode_reveal_timeout"] = "UsbControlFailureDeveloperModeReveal",
             ["apple_device_locked"] = "UsbControlFailureDeviceLocked",
             ["apple_connection_lost"] = "UsbControlFailureConnectionLost",
             ["developer_image_service_unavailable"] = "UsbControlFailureImageServiceUnavailable",
@@ -97,6 +99,23 @@ internal static partial class Program
             host.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
         Console.WriteLine($"DDI startup error routing and retained diagnostics passed ({cases.Count * 2} cases).");
+        var waitingBridge = new DirectUsbInputBridge();
+        var readySignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        typeof(DirectUsbInputBridge).GetField("_readySignal", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(waitingBridge, readySignal);
+        var events = new List<BridgeEvent>();
+        waitingBridge.OnEvent += events.Add;
+        handleLine.Invoke(waitingBridge, [JsonSerializer.Serialize(new {
+            @event = "user_action_required", code = "developer_mode_revealed", message = "Enable on the phone" })]);
+        if (readySignal.Task.Exception?.InnerException is not BridgeUserActionRequiredException { Code: "developer_mode_revealed" } ||
+            waitingBridge.LastErrorCode is not null || waitingBridge.IsReady || waitingBridge.GateOpen ||
+            events.Count != 1 || events[0].Event != "user_action_required")
+            throw new InvalidOperationException("Developer Mode waiting was treated as failure or ready.");
+        if ((int)typeof(DirectUsbInputBridge).GetField("_terminalEventReceived", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .GetValue(waitingBridge)! != 1)
+            throw new InvalidOperationException("User action event did not suppress the subsequent EOF error.");
+        waitingBridge.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        Console.WriteLine("Developer Mode user-action event ends startup without an error or input readiness.");
         if (packagedBridge is not null)
         {
             if (!RuntimeBinaryIntegrity.VerifyUsbTouchBridgeRuntime(packagedBridge, out var failure))

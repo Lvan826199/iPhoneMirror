@@ -37,7 +37,7 @@ internal sealed class ReverseControlStatusViewModel : INotifyPropertyChanged
         ? LocalizationService.Format("ControlTotalDuration", duration.TotalSeconds) : string.Empty;
     public Visibility CancelVisibility => _snapshot is { CanCancel: true, IsTerminal: false } ? Visibility.Visible : Visibility.Collapsed;
     public Visibility CloseVisibility => _snapshot is { IsTerminal: true } ? Visibility.Visible : Visibility.Collapsed;
-    public Visibility RetryVisibility => _snapshot is { Stage: ControlStage.Failed } && RetryRequested is not null ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility RetryVisibility => _snapshot is { Stage: ControlStage.Failed or ControlStage.WaitingForDeveloperMode } && RetryRequested is not null ? Visibility.Visible : Visibility.Collapsed;
     public Visibility PromptVisibility => _snapshot?.Prompt is null ? Visibility.Collapsed : Visibility.Visible;
     public Visibility BluetoothPairingStepsVisibility =>
         _snapshot is

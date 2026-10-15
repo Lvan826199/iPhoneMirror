@@ -25,6 +25,25 @@ internal sealed class DeviceSessionManager
         _destroySession = destroySession;
     }
 
+    internal async Task<NativeSessionCreateResult> CreateAsync(
+        Func<NativeSessionCreateResult> create, CancellationToken cancellation)
+    {
+        // Native creation is synchronous. Once it starts, retain ownership and
+        // wait for its result rather than abandoning a handle on cancellation.
+        var result = await Task.Run(create, cancellation);
+        if (!cancellation.IsCancellationRequested) return result;
+        if (result.Handle is { } handle)
+        {
+            await Task.Run(() =>
+            {
+                try { _stopSession(handle); }
+                finally { _destroySession(handle); }
+            });
+        }
+        cancellation.ThrowIfCancellationRequested();
+        return result;
+    }
+
     // Kept as ulong because UI subscribers only need the raw identity for
     // comparison, not SafeHandle ownership.
     internal event Action<string, ulong>? SessionHandleChanged;

@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
@@ -28,6 +28,13 @@ internal static partial class Program
     {
         try
         {
+            // Set this before any test creates WPF windows, including API and lifecycle tests.
+            // Native preview tests retain their own real HWND/D3D rendering paths.
+            RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
+            if (args is ["--automation-lifecycle"])
+                return RunAutomationLifecycleTests();
+            if (args is ["--automation-lifecycle-long-startup"])
+                return RunAutomationLifecycleTests(verifyLongStartup: true);
             if (args is ["--device-control-live", var liveBridge, var liveUdid, var liveMode])
                 return RunDeviceControlLive(liveBridge, liveUdid, liveMode);
             if (args is ["--device-control-hold-live", var holdBridge, var holdUdid, var holdMode, var holdSeconds])
@@ -52,6 +59,10 @@ internal static partial class Program
                 return RunAutomationApiTests();
             if (args is ["--automation-settings", var automationOutput])
                 return RunAutomationSettingsTests(automationOutput);
+            if (args is ["--setup-tools", var toolsOutput])
+                return RunSetupToolsTests(toolsOutput);
+            if (args is ["--driver-ui", var toolsDriverAssembly, var toolsDriverOutput])
+                return RenderDriverTools(toolsDriverAssembly, toolsDriverOutput);
             if (args is ["--first-run-setup", var setupOutput])
                 return RunFirstRunSetupTests(setupOutput);
             if (args is ["--setup-assessment", var assessmentOutput])
@@ -257,8 +268,6 @@ internal static partial class Program
             if (args.Length != 0)
                 throw new ArgumentException("Unknown runtime test arguments: " + string.Join(" ", args));
             RunAutomationApiTests();
-            // Use deterministic WPF rendering; native preview checks still use their real HWNDs.
-            RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
             RunInteractionRegressionTests();
             TestWheelCancellationState();
             TestUsbPasteKeyboardState();
@@ -1371,7 +1380,25 @@ internal static partial class Program
             BindingFlags.Instance | BindingFlags.NonPublic) ??
             throw new MissingFieldException(typeof(MainWindow).FullName, "_allowClose");
         allowClose.SetValue(window, true);
-        window.Close();
+        // _allowClose deliberately bypasses the application-wide close path
+        // so the next test can create another window. Own that skipped cleanup:
+        // WPF may defer disposing HwndHost until dispatcher shutdown, leaving
+        // the global D3D renderer alive until DLL detach under the loader lock.
+        try
+        {
+            ((IDisposable)window.FindName("MainPreviewHost")).Dispose();
+            window.Close();
+        }
+        finally
+        {
+            var viewModel = (IPhoneMirror.App.ViewModels.MainViewModel)KeyboardField(window, "_viewModel");
+            var previousContext = SynchronizationContext.Current;
+            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(window.Dispatcher));
+            try { WaitReviewTask(viewModel.ShutdownAsync()); }
+            finally { SynchronizationContext.SetSynchronizationContext(previousContext); }
+        }
+        InteractionAssert(!IPhoneMirror.App.Interop.NativeCore.ForcePreviewRefresh(),
+            "A closed test window retained its native preview renderer.");
     }
 
     private static void TestCompleteWorkspaceAnimation(MainWindow window)

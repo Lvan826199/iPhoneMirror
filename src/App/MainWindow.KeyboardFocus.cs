@@ -119,6 +119,8 @@ public partial class MainWindow
         Deactivated -= OnMainKeyboardDeactivated;
         Activated -= OnMainKeyboardActivated;
         PreviewGotKeyboardFocus -= OnMainKeyboardFocusChanged;
+        PreviewTextInput -= OnRemoteTextInput;
+        ClearControlText();
     }
 
     private bool IsControlKeyboardForeground

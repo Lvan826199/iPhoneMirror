@@ -1,12 +1,103 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Text;
 using IPhoneMirror.App.Interop;
 using IPhoneMirror.App.Services;
 
 internal static class IssueFixMediaTests
 {
+    internal static async Task RunExplicitAsync(string path)
+    {
+        Require(RuntimeBinaryIntegrity.IsTrustedFfmpeg(path), "integration FFmpeg must match the pinned hash");
+        async Task<string> Probe(string option)
+        {
+            using var process = Process.Start(new ProcessStartInfo(path)
+            {
+                ArgumentList = { "-hide_banner", option }, UseShellExecute = false,
+                CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+            })!;
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            Require(process.ExitCode == 0, "FFmpeg capability probe failed");
+            return await stdout + await stderr;
+        }
+        var caps = MediaOutputService.CreateCapabilities(path, await Probe("-encoders"),
+            await Probe("-protocols"), await Probe("-muxers"));
+        // Use the deterministic CPU encoder in a device-free integration test.
+        Require(caps.H264EncoderCandidates.Contains("libx264"), "verified runtime needs libx264");
+        caps = caps with { PreferredH264Encoder = "libx264", H264EncoderCandidates = ["libx264"] };
+        await RunAsync(caps);
+        await TestConcurrentSrtRecordingAsync(caps);
+    }
+
+    private static async Task TestConcurrentSrtRecordingAsync(MediaOutputCapabilities caps)
+    {
+        Require(caps.HasSrt, "verified runtime needs SRT for the loopback integration test");
+        var root = Path.Combine(Path.GetTempPath(), "iphoneMirror-parallel-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        using var reservation = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var port = ((IPEndPoint)reservation.Client.LocalEndPoint!).Port;
+        reservation.Close();
+        var streamPath = Path.Combine(root, "received.ts");
+        var recordingPath = Path.Combine(root, "recording.mp4");
+        var start = new ProcessStartInfo(caps.FfmpegPath)
+        {
+            UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true,
+        };
+        foreach (var argument in new[] { "-hide_banner", "-loglevel", "error", "-i",
+            $"srt://127.0.0.1:{port}?mode=listener&latency=20", "-c", "copy", "-f", "mpegts", "-y", streamPath })
+            start.ArgumentList.Add(argument);
+        using var receiver = Process.Start(start)!;
+        var errors = receiver.StandardError.ReadToEndAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+        try
+        {
+            while (!IPGlobalProperties.GetIPGlobalProperties().GetActiveUdpListeners().Any(p => p.Port == port))
+            {
+                Require(!receiver.HasExited, "SRT receiver exited before listening");
+                await Task.Delay(20, timeout.Token);
+            }
+            Nv12VideoFrame Frame(ulong _, uint width, uint height) => new(width, height, width,
+                Stopwatch.GetTimestamp(), new byte[checked((int)(width * height * 3 / 2))]);
+            await using var outputs = new MediaOutputCoordinator(
+                new MediaOutputService(Frame, (_, _) => null),
+                new MediaOutputService(Frame, (_, _) => null));
+            var failures = new List<string>();
+            outputs.StatusChanged += (message, failed) => { if (failed) lock (failures) failures.Add(message); };
+            await outputs.StartAsync(1, new(MediaOutputKind.Recording, recordingPath, 160, 160, 20, 500), caps, timeout.Token);
+            await outputs.StartAsync(1, new(MediaOutputKind.Srt,
+                $"srt://127.0.0.1:{port}?mode=caller&latency=20", 160, 160, 20, 500), caps, timeout.Token);
+            await Task.Delay(2200, timeout.Token);
+            await outputs.StopAsync(MediaOutputKind.Recording).WaitAsync(timeout.Token);
+            Require(outputs.IsStreaming && !outputs.IsRecording, "real recording stop interrupted SRT");
+            Require(TrackDurations(recordingPath)["vide"] > 2, "parallel recording did not finalize");
+            await Task.Delay(1200, timeout.Token);
+            Require(outputs.IsStreaming && !receiver.HasExited, "SRT stopped when recording finalized");
+            await outputs.StopAsync(MediaOutputKind.Srt).WaitAsync(timeout.Token);
+            await receiver.WaitForExitAsync(timeout.Token);
+            lock (failures) Require(failures.Count == 0, string.Join("; ", failures));
+            Require(File.Exists(streamPath) && new FileInfo(streamPath).Length > 0,
+                "loopback SRT receiver produced no media");
+            // Decode the received video rather than just counting socket bytes.
+            await RunFfmpegAsync(caps.FfmpegPath, ["-v", "error", "-i", streamPath,
+                "-map", "0:v:0", "-frames:v", "1", "-f", "null", "-"]);
+            Console.WriteLine("Real FFmpeg integration passed: simultaneous MP4 + loopback SRT, independent recording stop, stream continuation and received video decode.");
+        }
+        finally
+        {
+            if (!receiver.HasExited) receiver.Kill(entireProcessTree: true);
+            await receiver.WaitForExitAsync();
+            _ = await errors; // Receiver may report EOF as an SRT input error.
+            foreach (var file in Directory.GetFiles(root)) File.Delete(file);
+            Directory.Delete(root);
+        }
+    }
+
     internal static async Task RunAsync(MediaOutputCapabilities capabilities)
     {
         var root = Path.Combine(Path.GetTempPath(), "iphoneMirror-issue-media-" + Guid.NewGuid().ToString("N"));

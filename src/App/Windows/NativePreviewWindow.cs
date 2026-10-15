@@ -848,6 +848,11 @@ internal sealed class NativePreviewWindow : IDisposable
                     (int)((lParam.ToInt64() >> 16) & 0x1FF)));
                 handled = true;
                 return 0;
+            case 0x0102 when IsPointerInputActive && ((lParam.ToInt64() >> 16) & 0xFF) == 0:
+                _keyboardInput?.Invoke(new PreviewKeyboardEventArgs(
+                    PreviewKeyboardKind.Text, 0) { Text = ((char)wParam).ToString() });
+                handled = true;
+                return 0;
             case WmSysKeyDown when IsPointerInputActive:
                 _keyboardInput?.Invoke(new PreviewKeyboardEventArgs(
                     PreviewKeyboardKind.Down, wParam.ToInt32(),

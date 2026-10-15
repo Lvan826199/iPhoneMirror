@@ -9,10 +9,15 @@ from __future__ import annotations
 import asyncio
 import copy
 import contextlib
+import hashlib
 import logging
+import os
 import plistlib
+import sys
+import tempfile
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from xml.parsers.expat import ExpatError
 
 import httpx
@@ -140,7 +145,7 @@ def personalization_request(build_manifest, identifiers, ecid, nonce):
     return plistlib.dumps(request._request)
 
 
-async def _request_ticket_once(payload: bytes, headers) -> bytes:
+async def _request_ticket_once(payload: bytes, headers, ticket_keys=('ApImg4Ticket',)) -> bytes:
     async with httpx.AsyncClient(timeout=httpx.Timeout(18, connect=8),
                                  follow_redirects=False) as client:
         async with client.stream('POST', TSS_URL, headers=headers, content=payload) as response:
@@ -164,13 +169,15 @@ async def _request_ticket_once(payload: bytes, headers) -> bytes:
                                       'Apple rejected personalization of this developer image.')
     if fields.get(b'MESSAGE') != b'SUCCESS' or not separator:
         raise ValueError('Apple did not return a successful personalization response')
-    ticket = plistlib.loads(document).get('ApImg4Ticket')
-    if not isinstance(ticket, bytes) or not ticket:
-        raise ValueError('Apple returned no personalization ticket')
-    return ticket
+    result = plistlib.loads(document)
+    for key in ticket_keys:
+        ticket = result.get(key)
+        if isinstance(ticket, bytes) and ticket:
+            return ticket
+    raise ValueError('Apple returned no personalization ticket')
 
 
-async def request_ticket(payload: bytes) -> bytes:
+async def request_ticket(payload: bytes, ticket_keys=('ApImg4Ticket',)) -> bytes:
     headers = {'Cache-Control': 'no-cache', 'Content-Type': 'text/xml; charset="utf-8"',
                'User-Agent': 'InetURL/1.0'}
     try:
@@ -179,7 +186,7 @@ async def request_ticket(payload: bytes) -> bytes:
         async with asyncio.timeout(TSS_TIMEOUT_SECONDS):
             for attempt in range(TSS_ATTEMPTS):
                 try:
-                    return await _request_ticket_once(payload, headers)
+                    return await _request_ticket_once(payload, headers, ticket_keys)
                 except BridgePrerequisiteError as error:
                     if error.code != 'developer_image_tss_unavailable' or attempt + 1 == TSS_ATTEMPTS:
                         raise
@@ -195,6 +202,263 @@ async def request_ticket(payload: bytes) -> bytes:
         # Do not copy proxy URLs, response bodies, identifiers or tickets into logs.
         raise BridgePrerequisiteError('developer_image_tss_failed',
                                       f'Apple DDI personalization failed ({type(error).__name__}).') from error
+
+
+# Same immutable upstream snapshot as the legacy downloader. Cryptex's generic
+# identity does not require a BoardID/ChipID entry for each new iPhone model.
+CRYPTEX_DDI_REVISION = '6eae353ae694bda1c421d4a3eee5459ae59c99a1'
+CRYPTEX_DDI_BUILD = '27A5228h'
+CRYPTEX_DDI_FILES = {
+    'BuildManifest.plist': (804946, '27385d7582b03b36bb3104e22b520aee0c47d72fecb4e8ecfe12ef5d966c7012'),
+    'Image.dmg': (15895040, '873097f695a8b9734e2abc54f795a8874d40ff6fd11208ecb01ef29534c7c176'),
+    'Image.dmg.trustcache': (1895, 'f7f21986074eee03a215aca16ecfc78d6bf183600d8a0d2fb691f9896782e6f0'),
+    'Image.dmg.cryptex_info': (430, 'edf49aef55aacc063d4d7be05b713bb545ce2993b3f62bcc15eccd75e610ee6c'),
+    'Image.dmg.root_hash': (229, '3543fad2805b88119695c417e12679380b3b5a2742994bbcc839c8e2de5d7302'),
+}
+CRYPTEX_PAYLOAD_PATHS = {
+    'Cryptex1,GenericDmg': 'Image.dmg',
+    'Cryptex1,GenericTrustCache': 'Image.dmg.trustcache',
+    'Cryptex1,CryptexInfoPlist': 'Image.dmg.cryptex_info',
+    'Cryptex1,GenericVolume': 'Image.dmg.root_hash',
+}
+
+
+class _CryptexConnection:
+    """Own one SDK-created RemoteXPC channel, including partial connect.
+
+    CryptexdService opens a fresh channel per routine. Its connect precedes
+    its finally block, and its close has no deadline. Interpose only the
+    transport lifecycle; leave Apple's requests/file transfers in the SDK.
+    """
+    def __init__(self, connection):
+        self._connection = connection
+        self._closed = False
+        self._sdk_close = connection.close
+        # RemoteXPC.connect also calls self.close on handshake exceptions.
+        # Bound that internal path on this owned instance, never globally.
+        connection.close = self.close
+
+    def __getattr__(self, name):
+        return getattr(self._connection, name)
+
+    async def connect(self):
+        try:
+            await self._connection.connect()
+        except BaseException:
+            await self.close()
+            raise
+
+    async def close(self):
+        if self._closed:
+            return
+        self._closed = True
+        # SDK connect() calls close from its exception handler. If the outer
+        # operation deadline expires during that cleanup, retain the original
+        # connection failure instead of replacing it with a service timeout.
+        original_error = sys.exception()
+        connection = self._connection
+        # Keep the handles before SDK cleanup can clear its attributes.
+        writer = getattr(connection, '_writer', None)
+        reader_task = getattr(connection, '_file_chunk_reader_task', None)
+        completed = False
+        try:
+            async with asyncio.timeout(CLOSE_TIMEOUT_SECONDS):
+                if reader_task is not None:
+                    # The SDK suppresses CancelledError around this await,
+                    # including cancellation from our deadline. Join it here
+                    # so that cancellation cannot be consumed before close.
+                    connection._file_chunk_reader_task = None
+                    reader_task.cancel()
+                    await asyncio.gather(reader_task, return_exceptions=True)
+                await self._sdk_close()
+            completed = True
+        except asyncio.CancelledError:
+            if isinstance(original_error, Exception):
+                raise original_error
+            raise
+        except Exception as error:
+            # Never replace a request/handshake failure with cleanup noise.
+            log.warning('Cryptex channel cleanup failed: %s', type(error).__name__)
+        finally:
+            if not completed:
+                if reader_task is not None:
+                    reader_task.cancel()
+                if writer is not None:
+                    with contextlib.suppress(Exception):
+                        writer.transport.abort()
+                connection._writer = connection._reader = None
+
+
+class _CryptexRsd:
+    """Borrow the selected RSD, own only its Cryptex child connections."""
+    def __init__(self, rsd):
+        self._rsd = rsd
+        self._connections = []
+
+    def __getattr__(self, name):
+        return getattr(self._rsd, name)
+
+    def start_remote_service(self, name):
+        connection = _CryptexConnection(self._rsd.start_remote_service(name))
+        self._connections.append(connection)
+        return connection
+
+    async def close(self):
+        cancelled = None
+        for connection in self._connections:
+            try:
+                await connection.close()
+            except asyncio.CancelledError as error:
+                # Finish the other owned channels, then deliver cancellation.
+                cancelled = error
+        self._connections.clear()
+        if cancelled is not None:
+            raise cancelled
+
+
+async def _cryptex_operation(operation, timeout, error_code):
+    try:
+        async with asyncio.timeout(timeout):
+            return await operation
+    except TimeoutError as error:
+        raise BridgePrerequisiteError(error_code, 'Cryptex DDI device operation timed out.') from error
+
+
+def validate_cryptex_bundle(root: Path) -> None:
+    try:
+        for name, (size, digest) in CRYPTEX_DDI_FILES.items():
+            data = (root / name).read_bytes()
+            if len(data) != size or hashlib.sha256(data).hexdigest() != digest:
+                raise ValueError('Cryptex DDI size/hash mismatch')
+        manifest = plistlib.loads((root / 'BuildManifest.plist').read_bytes())
+        if manifest.get('ProductBuildVersion') != CRYPTEX_DDI_BUILD:
+            raise ValueError('Cryptex DDI build mismatch')
+        identity = next(item for item in manifest['BuildIdentities']
+                        if item.get('Info', {}).get('Variant', '').endswith('Developer Disk Image Cryptex'))
+        for key, name in CRYPTEX_PAYLOAD_PATHS.items():
+            entry = identity['Manifest'][key]
+            if entry['Info']['Path'] != name or \
+                    hashlib.sha384((root / name).read_bytes()).digest() != entry['Digest']:
+                raise ValueError('Cryptex payload path/digest mismatch')
+    except (OSError, KeyError, ValueError, TypeError, AttributeError, StopIteration,
+            plistlib.InvalidFileException, ExpatError) as error:
+        raise BridgePrerequisiteError('developer_image_bundle_invalid',
+                                      f'Cryptex DDI validation failed ({type(error).__name__}).') from error
+
+
+async def fetch_cryptex_bundle() -> Path:
+    root = Path(os.environ.get('LOCALAPPDATA') or tempfile.gettempdir()) / \
+        'iPhoneMirror' / 'DDI' / 'Cryptex1' / CRYPTEX_DDI_REVISION
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        async with asyncio.timeout(90), httpx.AsyncClient(timeout=httpx.Timeout(20, connect=8),
+                                                        follow_redirects=False) as client:
+            for name, (size, expected_hash) in CRYPTEX_DDI_FILES.items():
+                target = root / name
+                if target.is_file() and target.stat().st_size == size and \
+                        hashlib.sha256(target.read_bytes()).hexdigest() == expected_hash:
+                    continue
+                urls = (
+                    f'https://raw.githubusercontent.com/doronz88/DeveloperDiskImage/{CRYPTEX_DDI_REVISION}/'
+                    f'PersonalizedImages/Xcode_iOS_DDI_Cryptex/{name}',
+                    'https://api.github.com/repos/doronz88/DeveloperDiskImage/contents/'
+                    f'PersonalizedImages/Xcode_iOS_DDI_Cryptex/{name}?ref={CRYPTEX_DDI_REVISION}',
+                )
+                for index, url in enumerate(urls):
+                    partial = None
+                    try:
+                        with tempfile.NamedTemporaryFile(dir=root, prefix=name + '.', suffix='.part', delete=False) as output:
+                            partial = Path(output.name)
+                            digest, received = hashlib.sha256(), 0
+                            async with client.stream('GET', url, headers={
+                                    'Accept': 'application/vnd.github.raw+json', 'Accept-Encoding': 'identity',
+                                    'User-Agent': 'iUsbBridge/1.0'}) as response:
+                                response.raise_for_status()
+                                async for chunk in response.aiter_bytes():
+                                    received += len(chunk)
+                                    if received > size:
+                                        raise ValueError('Cryptex download exceeds pinned size')
+                                    output.write(chunk)
+                                    digest.update(chunk)
+                            if received != size or digest.hexdigest() != expected_hash:
+                                raise ValueError('Cryptex download size/hash mismatch')
+                        partial.replace(target)
+                        break
+                    except httpx.HTTPError:
+                        if index + 1 == len(urls):
+                            raise
+                        log.info('Cryptex DDI raw download unavailable; trying the pinned GitHub API asset.')
+                    finally:
+                        if partial is not None:
+                            partial.unlink(missing_ok=True)
+    except TimeoutError as error:
+        raise BridgePrerequisiteError('developer_image_download_timeout',
+                                      'Cryptex DDI download exceeded its total time budget.') from error
+    except (httpx.HTTPError, OSError, ValueError) as error:
+        raise BridgePrerequisiteError('developer_image_download_failed',
+                                      f'Cryptex DDI download failed ({type(error).__name__}).') from error
+    validate_cryptex_bundle(root)
+    return root
+
+
+async def prepare_cryptex_ddi(rsd, report_status=None) -> str:
+    """Use upstream Cryptex1 assets/nonce/TSS tags with bounded async signing.
+
+    The device verifies Apple's ticket. Never roll a nonce or uninstall an
+    existing DDI. HID readiness is checked on a fresh RSD by the caller.
+    """
+    from pymobiledevice3.services.cryptexd import CryptexdService, DDI_CRYPTEX_IDENTIFIER, load_cryptex1_assets
+    if CryptexdService.SERVICE_NAME not in (rsd.peer_info or {}).get('Services', {}):
+        raise BridgePrerequisiteError('developer_image_service_unavailable',
+                                      'The device did not advertise the Cryptex DDI service.')
+    owner = _CryptexRsd(rsd)
+    service = CryptexdService(owner)
+
+    async def phase(code):
+        if report_status is not None:
+            await report_status(code)
+
+    async def inventory():
+        installed = await _cryptex_operation(service.copy_installed(),
+            SERVICE_TIMEOUT_SECONDS, 'developer_image_service_timeout')
+        return [item for item in installed if item.identifier == DDI_CRYPTEX_IDENTIFIER]
+
+    try:
+        existing = await inventory()
+        if existing:
+            return existing[0].version
+        await phase('downloading_developer_image')
+        root = await fetch_cryptex_bundle()
+        assets = load_cryptex1_assets(root)
+        await phase('personalizing_developer_image')
+        request = TSSRequest()
+        identifiers = await _cryptex_operation(service.read_personalization_identifiers(),
+            SERVICE_TIMEOUT_SECONDS, 'developer_image_service_timeout')
+        nonce = await _cryptex_operation(service.cryptex_nonce(assets.nonce_domain),
+            SERVICE_TIMEOUT_SECONDS, 'developer_image_service_timeout')
+        request.add_cryptex1_tags(assets.build_identity, identifiers, nonce)
+        ticket = await request_ticket(plistlib.dumps(request._request), ('Cryptex1,Ticket', 'ApImg4Ticket'))
+        await phase('uploading_developer_image')
+        await _cryptex_operation(service.install(assets.image, assets.trustcache, ticket,
+            assets.info, assets.volumehash, assets.cryptex1_properties),
+            UPLOAD_TIMEOUT_SECONDS, 'developer_image_upload_timeout')
+        await phase('verifying_developer_image')
+        for attempt in range(3):
+            installed = await inventory()
+            if installed:
+                log.info('Cryptex DDI prepared version=%s', installed[0].version)
+                return installed[0].version
+            if attempt < 2:
+                await asyncio.sleep(.3)
+        raise BridgePrerequisiteError('developer_image_verification_failed',
+                                      'Cryptex install returned without a published DDI inventory entry.')
+    except BridgePrerequisiteError:
+        raise
+    except Exception as error:
+        raise device_failure(error) or BridgePrerequisiteError(
+            'developer_image_mount_failed', f'Cryptex DDI preparation failed ({type(error).__name__}).') from error
+    finally:
+        await owner.close()
 
 
 class PersonalizedImageMounter(UpstreamMounter):

@@ -32,14 +32,14 @@ internal sealed partial class MainViewModel
         {
             // Automatic recovery must not take focus from another device.
             // Its failure remains visible when this device is selected again.
-            if (_disposed || (snapshot.Prompt is null && snapshot.Stage != ControlStage.Failed)) return;
+            if (_disposed || AutomationControlStartup.Contains(udid) || (snapshot.Prompt is null && snapshot.Stage != ControlStage.Failed)) return;
             var dispatcher = Application.Current?.Dispatcher;
             if (dispatcher is null || dispatcher.HasShutdownStarted) return;
             dispatcher.BeginInvoke(new Action(() =>
             {
                 if (_disposed || (snapshot.Prompt is null &&
                     !DeviceViewModel.UdidEquals(SelectedDevice?.Udid, udid))) return;
-                if (!SetupActive && Application.Current?.MainWindow is { } owner)
+                if (!SetupActive && !AutomationControlStartup.Contains(udid) && Application.Current?.MainWindow is { } owner)
                     ReverseControlStatusWindow.Show(owner, control.ControlStatus,
                         () => _ = CancelReverseControlAsync(snapshot.Mode, udid),
                         () => _ = StartDeviceControlAsync(udid, snapshot.Mode == ControlStatusMode.Wireless));
@@ -98,7 +98,7 @@ internal sealed partial class MainViewModel
                 NotifyUsbControlStateChanged();
                 // Every entry (toolbar, shortcut, preview menu, command and retry)
                 // opens the same status surface before inspecting the binding.
-                if (!SetupActive && Application.Current?.MainWindow is { } owner)
+                if (!SetupActive && !AutomationControlStartup.Contains(target) && Application.Current?.MainWindow is { } owner)
                     ReverseControlStatusWindow.Show(owner, control.ControlStatus,
                         () => _ = CancelReverseControlAsync(mode, target),
                         () => _ = StartDeviceControlAsync(target, wireless));
@@ -164,6 +164,12 @@ internal sealed partial class MainViewModel
     private void ShowDeviceControlError(DeviceControlSession control, string transport,
         string? detail, string titleKey = "ReverseControlStartErrorTitle",
         string? technicalDetails = null, Func<Task>? retryOperation = null) =>
-        ShowReverseControlError(transport, detail, titleKey, technicalDetails,
-            retryOperation, control);
+        ShowAutomationAwareControlError(control, transport, detail, titleKey, technicalDetails, retryOperation);
+
+    private void ShowAutomationAwareControlError(DeviceControlSession control, string transport,
+        string? detail, string titleKey, string? technicalDetails, Func<Task>? retryOperation)
+    {
+        if (AutomationControlStartup.Contains(control.DeviceUdid)) return;
+        ShowReverseControlError(transport, detail, titleKey, technicalDetails, retryOperation, control);
+    }
 }

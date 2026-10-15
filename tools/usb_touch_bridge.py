@@ -80,7 +80,7 @@ from pymobiledevice3.pair_records import iter_remote_paired_identifiers
 from pymobiledevice3.services.mobile_image_mounter import (
     LATEST_DDI_BUILD_ID,
 )
-from ddi_support import BridgePrerequisiteError, PersonalizedImageMounter, bounded_mounter, device_failure
+from ddi_support import BridgePrerequisiteError, PersonalizedImageMounter, bounded_mounter, device_failure, prepare_cryptex_ddi
 from pymobiledevice3.remote.common import TunnelProtocol
 from pymobiledevice3.remote.module_imports import start_tunnel
 from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
@@ -121,6 +121,13 @@ except ImportError:  # pragma: no cover - optional in minimal source environment
     _UsbMuxTransport = _UsbmuxdThread = None
 
 log = logging.getLogger('iphoneMirror.usb_touch')
+
+
+class BridgeUserActionRequired(RuntimeError):
+    """A completed preparation step that needs on-device user action."""
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
 
 
 async def _bounded_remote_exit(service, timeout):
@@ -2189,6 +2196,7 @@ class TouchSession:
         self.gate_open = False
         self._owns_hid = False
         self._ddi_was_mounted = False
+        self._ddi_uses_cryptex = False
         self._ddi_refresh_attempted = False
         self._ddi_deadline = None
         self._ddi_rejection_scope = None
@@ -2199,6 +2207,7 @@ class TouchSession:
         self._usb_mux_resume = None
         self._pasteboard_lock = asyncio.Lock()
         self._pasteboard_service = None
+        self._pasteboard_refresh_required = False
         self._pasteboard_rsd = None
         self._pasteboard_last_text = object()
         self._pasteboard_unconfirmed_writes: set[str] = set()
@@ -2660,7 +2669,12 @@ class TouchSession:
             if error.code != 'touch_surface_unavailable':
                 raise
 
-        if self._ddi_was_mounted and not self._ddi_refresh_attempted:
+        if self._ddi_uses_cryptex and self.transport_mode == 'wireless':
+            # A Network Lockdown session may already have a prepared DDI. If
+            # its actual HID probe fails, prepare over the exact USB device
+            # once, then build a new wireless RSD service snapshot.
+            await self._prepare_ddi_for_remote_pairing()
+        elif self._ddi_was_mounted and not self._ddi_refresh_attempted:
             self._ddi_refresh_attempted = True
             await self._refresh_personalized_ddi(lockdown)
 
@@ -2811,10 +2825,9 @@ class TouchSession:
                     'device_identity_mismatch',
                     'USB DDI preparation found a different iPhone; refusing to use it.',
                 )
-            # Wireless pairing uses the exact same DDI candidate chain as the
-            # wired path: bundled image, environment override, then the
-            # verified GitHub direct/proxy/mirror downloader.
-            await self._preflight_developer_environment(lockdown)
+            # This Lockdown client is explicitly USB, even though the control
+            # session remains wireless. Prepare the correct DDI over it.
+            await self._preflight_developer_environment(lockdown, usb_preparation=True)
             if self._ddi_was_mounted and not self._ddi_refresh_attempted:
                 self._ddi_refresh_attempted = True
                 await self._refresh_personalized_ddi(lockdown)
@@ -2826,21 +2839,24 @@ class TouchSession:
         return await create_lockdown_with_retry(
             self.ipc, self.udid, connection_type)
 
-    async def _preflight_developer_environment(self, lockdown) -> None:
+    async def _preflight_developer_environment(self, lockdown, *, usb_preparation=False) -> None:
         if self._ddi_deadline is None or self._recovering:
             self._ddi_deadline = asyncio.get_running_loop().time() + PERSONALIZED_DDI_PREPARE_TIMEOUT_SECONDS
         try:
             async with asyncio.timeout_at(self._ddi_deadline):
-                await self._prepare_developer_environment(lockdown)
+                if usb_preparation:
+                    await self._prepare_developer_environment(lockdown, usb_preparation=True)
+                else:
+                    await self._prepare_developer_environment(lockdown)
         except TimeoutError as error:
             raise BridgePrerequisiteError('developer_image_prepare_timeout',
                                           'DDI preparation exceeded its total time budget.') from error
 
-    async def _prepare_developer_environment(self, lockdown) -> None:
-        """Require Developer Mode and prepare a Personalized DDI before RSD.
+    async def _prepare_developer_environment(self, lockdown, *, usb_preparation=False) -> None:
+        """Require Developer Mode and prepare the system's DDI before HID.
 
-        Try the explicitly supplied bundle, the environment bundle, then the
-        verified download/cache. Apple personalizes the chosen image.
+        iOS 27 uses the Cryptex USB/RSD route. Older systems try the explicitly
+        supplied bundle, environment bundle, then verified download/cache.
         """
         await self._emit_status('checking_developer_environment')
         try:
@@ -2867,10 +2883,33 @@ class TouchSession:
                 f'Unable to query Developer Mode status: {type(error).__name__}: {str(error)[:180]}',
             ) from error
         if not developer_mode_enabled:
+            if self.transport_mode == 'usb':
+                await self._reveal_developer_mode(lockdown)
+                raise BridgeUserActionRequired(
+                    'developer_mode_revealed',
+                    'The device accepted the request to show Developer Mode in Settings. '
+                    'Enable it under Privacy & Security, restart and confirm on the device, then retry.',
+                )
             raise BridgePrerequisiteError(
                 'developer_mode_required',
                 'Developer Mode must be enabled on the device before USB control can start.',
             )
+
+        try:
+            ios_major = int(str(getattr(lockdown, 'product_version', '')).split('.')[0])
+        except ValueError:
+            ios_major = 0
+        self._ddi_uses_cryptex = ios_major == 27
+        if self._ddi_uses_cryptex:
+            # Cryptex's generic identity supports new hardware without a
+            # board-specific PersonalizedDMG manifest entry. Do not run the
+            # legacy image-mounter's unmount/remount recovery on this image.
+            self._ddi_was_mounted = False
+            if self.transport_mode == 'usb' or usb_preparation:
+                await self._prepare_cryptex_developer_image(lockdown)
+            # Wireless readiness still requires the real HID probe. A missing
+            # service triggers explicit USB preparation in its recovery path.
+            return
 
         try:
             self._ddi_was_mounted = await self._is_personalized_ddi_mounted(lockdown)
@@ -2882,6 +2921,72 @@ class TouchSession:
         if self._ddi_was_mounted:
             return
         await self._mount_personalized_ddi(lockdown)
+
+    async def _prepare_cryptex_developer_image(self, lockdown) -> None:
+        from pymobiledevice3.remote.userspace_tunnel import UserspaceDialPlane
+
+        if not lockdown.udid or (self.udid and not _udid_matches(lockdown.udid, self.udid)):
+            raise BridgePrerequisiteError('device_identity_mismatch',
+                                          'USB DDI preparation found a different iPhone.')
+        service = None
+        try:
+            service = await CoreDeviceTunnelProxy.create(lockdown)
+            async with self._bounded_tunnel(service) as result:
+                tun = result.client.tun
+                if not hasattr(tun, 'set_peer'):
+                    raise BridgePrerequisiteError('userspace_tunnel_unavailable',
+                                                  'The USB DDI tunnel has no userspace network stack.')
+                tun.set_peer(result.address)
+                async with UserspaceDialPlane(tun, result.address) as dial:
+                    rsd = RemoteServiceDiscoveryService((result.address, result.port), open_connection=dial.dial)
+                    try:
+                        await rsd.__aenter__()
+                        if not rsd.udid or not _udid_matches(rsd.udid, lockdown.udid):
+                            raise BridgePrerequisiteError('device_identity_mismatch',
+                                                          'DDI RSD identity does not match the selected device.')
+                        await prepare_cryptex_ddi(rsd, self._emit_status)
+                    finally:
+                        await self._close_remote_service(rsd, 'cryptex_preparation_rsd')
+            # RSD advertises a handshake snapshot. The subsequent control
+            # tunnel is opened only after this preparation tunnel is closed.
+        except BridgePrerequisiteError:
+            raise
+        except Exception as error:
+            raise device_failure(error) or BridgePrerequisiteError(
+                'developer_image_service_unavailable',
+                f'Opening the Cryptex DDI tunnel failed ({type(error).__name__}).') from error
+        finally:
+            if service is not None:
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(service.close(), 3)
+
+    async def _reveal_developer_mode(self, lockdown) -> None:
+        # AMFI action 0 only reveals the Settings toggle. Never request enable
+        # (1) or post-restart acceptance (2); those remain on-device actions.
+        # Own the service explicitly: the upstream reveal helper does not close it.
+        service = None
+        try:
+            async with asyncio.timeout(PERSONALIZED_DDI_INVENTORY_TIMEOUT_SECONDS):
+                service = await lockdown.start_lockdown_service('com.apple.amfi.lockdown')
+                response = await service.send_recv_plist({'action': 0})
+                if not isinstance(response, dict) or response.get('success') is not True:
+                    raise BridgePrerequisiteError('developer_mode_reveal_failed',
+                                                  'The device rejected the Developer Mode reveal request.')
+        except TimeoutError as error:
+            raise BridgePrerequisiteError('developer_mode_reveal_timeout',
+                                          'The Developer Mode reveal request timed out.') from error
+        except BridgePrerequisiteError:
+            raise
+        except Exception as error:
+            # An unavailable AMFI service is not a missing developer image.
+            if not isinstance(error, InvalidServiceError) and (known := device_failure(error)) is not None:
+                raise known from error
+            raise BridgePrerequisiteError('developer_mode_reveal_failed',
+                                          'Unable to reveal the Developer Mode toggle.') from error
+        finally:
+            if service is not None:
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(service.close(), 2)
 
     def _local_ddi_candidates(self) -> list[tuple[tuple[Path, Path, Path], str]]:
         candidates: list[tuple[tuple[Path, Path, Path], str]] = []
@@ -4156,6 +4261,8 @@ class TouchSession:
         if self.rsd is None:
             raise RuntimeError('pasteboard service is unavailable')
         await self._close_device_pasteboard()
+        if self._pasteboard_refresh_required:
+            await self._refresh_pasteboard_endpoint()
         self._pasteboard_operation_id += 1
         operation_id = self._pasteboard_operation_id
         self._pasteboard_service = PasteboardService(self.rsd)
@@ -4163,6 +4270,11 @@ class TouchSession:
         try:
             await self._pasteboard_service.__aenter__()
         except BaseException as error:
+            # A restarted developer service can leave the original RSD service
+            # catalogue pointing at a retired port. Retrying that same address
+            # cannot recover it. Rediscover only this side channel on the next
+            # operation; never replace the live HID session or repeat its chord.
+            self._pasteboard_refresh_required = True
             await self._close_device_pasteboard()
             log.warning('pasteboard_connect_failed op=%s generation=%s error=%s',
                         operation_id, self._generation, type(error).__name__)
@@ -4171,6 +4283,34 @@ class TouchSession:
                  operation_id, self._generation,
                  getattr(self._pasteboard_service, 'service_name', 'unknown'))
         return self._pasteboard_service
+
+    async def _refresh_pasteboard_endpoint(self) -> None:
+        rsd = self.rsd
+        address = getattr(getattr(rsd, 'service', None), 'address', None)
+        if address is None:
+            self._pasteboard_refresh_required = False
+            return  # compatibility with providers without an RSD catalogue
+        discovery = RemoteXPCConnection(address, open_connection=rsd.open_connection)
+        try:
+            async with asyncio.timeout(PASTEBOARD_OPERATION_TIMEOUT_SECONDS):
+                await discovery.connect()
+                await discovery.send_device_handshake()
+                snapshot = await discovery.receive_response()
+            identity = snapshot.get('Properties', {}).get('UniqueDeviceID')
+            if not identity or not _udid_matches(identity, rsd.udid):
+                raise RuntimeError('pasteboard discovery device identity mismatch')
+            name = PasteboardService.SERVICE_NAME
+            endpoint = snapshot.get('Services', {}).get(name)
+            if not isinstance(endpoint, dict) or 'Port' not in endpoint:
+                raise RuntimeError('pasteboard service is not advertised')
+            previous = rsd.peer_info.get('Services', {}).get(name, {})
+            # Keep all other service entries and active RSD/HID connections.
+            rsd.peer_info.setdefault('Services', {})[name] = endpoint
+            self._pasteboard_refresh_required = False
+            log.info('pasteboard_endpoint_refreshed generation=%s changed=%s',
+                     self._generation, previous.get('Port') != endpoint.get('Port'))
+        finally:
+            await self._close_remote_service(discovery, 'pasteboard_discovery')
 
     async def _close_device_pasteboard(self):
         service, self._pasteboard_service = self._pasteboard_service, None
@@ -4628,6 +4768,9 @@ async def main_async(rate_hz: int, udid: Optional[str], transport: str,
             # Host cancellation closes stdin even before the HID input loop
             # starts. Cancel DDI/tunnel setup now so USB cleanup can run.
             await disconnected
+    except BridgeUserActionRequired as e:
+        await ipc.emit({'event': 'user_action_required', 'code': e.code,
+                        'message': str(e)[:300]})
     except Exception as e:
         await ipc.emit({'event': 'error', 'code': bridge_error_code(e),
                         'message': str(e)[:300]})
@@ -4709,6 +4852,11 @@ async def check_setup_async(udid: str, wireless: bool = False) -> dict:
 
 
 def main() -> int:
+    # The managed host consumes UTF-8 on both pipes; PyInstaller's isolated
+    # runtime otherwise uses the Windows locale and can fail on Chinese status.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8')
     parser = argparse.ArgumentParser()
     parser.add_argument('--rate-hz', type=int, default=120)
     parser.add_argument('--udid', default=None)
@@ -4740,6 +4888,7 @@ def main() -> int:
             'pymobiledevice3.remote.core_device.hid_service',
             'pymobiledevice3.remote.core_device.pasteboard_service',
             'pymobiledevice3.services.mobile_image_mounter',
+            'pymobiledevice3.services.cryptexd',
             'developer_disk_image', 'pyimg4', 'qh3', 'pytun_pmd3.wintun',
             'usb.backend.libusb0', 'usb.backend.libusb1',
         )

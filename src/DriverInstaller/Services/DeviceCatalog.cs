@@ -134,11 +134,8 @@ internal sealed class DeviceCatalog
         var driverInf = FindAppleUsbDriverPackage();
         var serviceInstalled = installedService is not null;
         var driverInstalled = driverInf is not null;
-        var diagnosticKey = ResolveAppleSupportDiagnosticKey(serviceInstalled,
-            serviceRunning, driverInstalled);
-        var result = new AppleSupportStatus(serviceInstalled, serviceRunning,
-            installedService, driverInstalled, driverInf,
-            DriverLocalization.Get(diagnosticKey));
+        var result = DescribeAppleSupport(serviceInstalled, serviceRunning,
+            installedService, driverInstalled, driverInf, AppleMuxSupportProbe.Inspect());
         var fields = new (string Key, object? Value)[]
         {
             ("service_installed", result.ServiceInstalled),
@@ -146,6 +143,9 @@ internal sealed class DeviceCatalog
             ("service", result.ServiceName),
             ("usb_driver_installed", result.UsbDriverInstalled),
             ("usb_driver_inf", result.UsbDriverInf),
+            ("mux_available", result.MuxAvailable),
+            ("mux_port_occupied", result.MuxPortOccupied),
+            ("mux_listener", result.MuxListener),
         };
         if (writeLog)
         {
@@ -155,6 +155,19 @@ internal sealed class DeviceCatalog
                 DriverLogger.WriteWarning("device-catalog", "apple_support_status", fields);
         }
         return result;
+    }
+
+    internal static AppleSupportStatus DescribeAppleSupport(bool serviceInstalled,
+        bool serviceRunning, string? serviceName, bool driverInstalled, string? driverInf,
+        AppleMuxSupport mux)
+    {
+        var diagnostic = mux.PortOccupied && !mux.Available
+            ? DriverLocalization.Format("AppleMuxPortConflict", mux.Listener ??
+                DriverLocalization.Get("AppleMuxUnknownListener"))
+            : DriverLocalization.Get(driverInstalled && mux.Available ? "AppleMuxReady" :
+                ResolveAppleSupportDiagnosticKey(serviceInstalled, serviceRunning, driverInstalled));
+        return new(serviceInstalled, serviceRunning, serviceName, driverInstalled, driverInf,
+            diagnostic, mux.Available, mux.PortOccupied, mux.Listener);
     }
 
     internal static string ResolveAppleSupportDiagnosticKey(bool serviceInstalled,

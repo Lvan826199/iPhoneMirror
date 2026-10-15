@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
@@ -64,6 +64,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             if (!Set(ref _isBusy, value)) return;
             OnPropertyChanged(nameof(BusyVisibility));
             NotifyCommands();
+            if (!value && _deviceRefreshPending && !_closed) _deviceRefresh.Start();
         }
     }
     public Visibility BusyVisibility => IsBusy ? Visibility.Visible : Visibility.Collapsed;
@@ -99,8 +100,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private static string L(string key) => DriverLocalization.Get(key);
     private static string F(string key, params object?[] args) => DriverLocalization.Format(key, args);
 
-    public MainWindow()
+    private readonly bool _previewOnly;
+    private bool _deviceRefreshPending, _closed;
+    private System.Windows.Interop.HwndSource? _deviceSource;
+    private readonly System.Windows.Threading.DispatcherTimer _deviceRefresh = new() { Interval = TimeSpan.FromMilliseconds(650) };
+
+    public MainWindow() : this(false) { }
+    internal MainWindow(bool previewOnly)
     {
+        _previewOnly = previewOnly;
         ThemeChoices =
         [
             new(DriverThemeMode.System, L("ThemeSystem")),
@@ -112,9 +120,35 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _appleInstaller = new AppleSupportInstaller(_catalog);
         _operations.StatusChanged += status => OperationStatus = status;
         StateChanged += OnWindowStateChanged;
+        _deviceRefresh.Tick += async (_, _) =>
+        {
+            _deviceRefresh.Stop();
+            if (_closed || IsBusy) return;
+            _deviceRefreshPending = false;
+            await RefreshAsync();
+        };
+        Closing += (_, e) => { if (IsBusy) e.Cancel = true; };
+        Closed += (_, _) => { _closed = true; _deviceRefresh.Stop(); _deviceSource?.RemoveHook(DeviceMessage); };
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e) => await RefreshAsync();
+    private async void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_previewOnly) return;
+        _deviceSource = System.Windows.Interop.HwndSource.FromHwnd(new System.Windows.Interop.WindowInteropHelper(this).Handle);
+        _deviceSource?.AddHook(DeviceMessage);
+        await RefreshAsync();
+    }
+    private nint DeviceMessage(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
+    {
+        if (message == 0x0219 && !_closed && wParam.ToInt64() is 0x8000 or 0x8004 or 0x0007)
+        {
+            // Remember hotplug during an operation or scan and refresh once it has settled.
+            _deviceRefreshPending = true;
+            _deviceRefresh.Stop();
+            if (!IsBusy) _deviceRefresh.Start();
+        }
+        return 0;
+    }
 
     private void OnWindowStateChanged(object? sender, EventArgs e)
     {

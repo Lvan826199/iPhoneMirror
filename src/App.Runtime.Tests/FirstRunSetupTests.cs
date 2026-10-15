@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
@@ -247,13 +247,13 @@ internal static partial class Program
             var startupStore = new FirstRunSetupStore(Path.Combine(output, "startup-once.json"));
             if (File.Exists(startupStore.PathName)) File.Delete(startupStore.PathName);
             Check(startupStore.Load().ShouldOpen, "First startup did not request setup.");
-            var firstDisplay = new FirstRunSetupWindow(vm, startupStore, checkOnOpen: false);
+            var firstDisplay = new FirstRunSetupWindow(vm, startupStore);
             firstDisplay.Show(); firstDisplay.UpdateLayout();
             Check(!startupStore.Load().ShouldOpen, "First display did not persist the automatic-open guard.");
             typeof(FirstRunSetupWindow).GetField("_allowClose", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(firstDisplay, true);
             firstDisplay.Close();
             Check(!startupStore.Load().ShouldOpen, "Unfinished setup reopened on the next startup.");
-            var manualDisplay = new FirstRunSetupWindow(vm, startupStore, rerun: true, checkOnOpen: false);
+            var manualDisplay = new FirstRunSetupWindow(vm, startupStore, rerun: true);
             manualDisplay.Show(); manualDisplay.UpdateLayout();
             Check(manualDisplay.IsVisible && !startupStore.Load().ShouldOpen, "Manual setup entry was blocked or rearmed automatic startup.");
             typeof(FirstRunSetupWindow).GetField("_allowClose", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(manualDisplay, true);
@@ -386,7 +386,7 @@ internal static partial class Program
             // Exercise the production animation path on choice-only pages: no hardware is started.
             var animationStore = new FirstRunSetupStore(Path.Combine(output, "animation-preview.json"));
             animationStore.Save(new() { Step = SetupStep.Usage, Usage = SetupUsage.MirrorAndControl });
-            var animatedWindow = new FirstRunSetupWindow(vm, animationStore, checkOnOpen: false);
+            var animatedWindow = new FirstRunSetupWindow(vm, animationStore);
             void Pump(int milliseconds)
             {
                 var frame = new DispatcherFrame();
@@ -637,12 +637,12 @@ internal static partial class Program
                     WirelessBackendDraft = WirelessReceiverBackend.UxPlay };
                 flowStore.Save(completedDraft);
                 var rerun = new FirstRunSetupWindow(vm, flowStore, rerun: true, previewOnly: true);
-                Check(rerun.State.Disposition == SetupDisposition.Completed && rerun.State.CustomizeDisplay,
-                    "Opening the assistant erased completed setup history before checking it.");
+                Check(rerun.State.Disposition == SetupDisposition.New && rerun.State.Step == SetupStep.Welcome && !rerun.State.CustomizeDisplay,
+                    "Reopening completed setup did not start directly at the welcome page.");
                 typeof(FirstRunSetupWindow).GetField("_allowClose", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(rerun, true); rerun.Close();
                 flowStore.Save(new() { Disposition = SetupDisposition.InProgress, Step = SetupStep.WirelessBackend,
                     WirelessBackendDraft = WirelessReceiverBackend.Original, WirelessProfileDraft = vm.WirelessDisplayProfiles.Last().Id });
-                var resumed = new FirstRunSetupWindow(vm, flowStore, previewOnly: true, checkOnOpen: false);
+                var resumed = new FirstRunSetupWindow(vm, flowStore, previewOnly: true);
                 Check(vm.SelectedWirelessReceiverBackend.Backend == WirelessReceiverBackend.Original &&
                     vm.SelectedWirelessDisplayProfile.Id == vm.WirelessDisplayProfiles.Last().Id, "Resume lost wireless preference draft.");
                 typeof(FirstRunSetupWindow).GetField("_allowClose", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(resumed, true); resumed.Close();

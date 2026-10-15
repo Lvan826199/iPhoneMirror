@@ -11,6 +11,8 @@ public partial class MainWindow
     private AutomationService? _automationService;
     private readonly AutomationKeyStore _automationKeys = new();
     private readonly SemaphoreSlim _automationSettingsGate = new(1, 1);
+    private Task? _automationStartup;
+    private AutomationSettings? _automationEffectiveSettings;
 
     private void InitializeAutomation()
     {
@@ -31,19 +33,19 @@ public partial class MainWindow
             }
             return false;
         };
-        Loaded += OnAutomationLoaded;
     }
-    private async void OnAutomationLoaded(object sender, RoutedEventArgs e)
+    private Task StartAutomationOnStartupAsync()
     {
-        Loaded -= OnAutomationLoaded;
-        if (Application.Current is not App { IsUiPreviewMode: false } app || !app.UpdateSettings.AutomationApi.Enabled) return;
-        await ConfigureAutomationAsync(app.UpdateSettings.AutomationApi, save: false);
+        if (Application.Current is not App { IsUiPreviewMode: false } app) return Task.CompletedTask;
+        return _automationStartup ??= app.UpdateSettings.AutomationApi.Enabled
+            ? ConfigureAutomationAsync(app.UpdateSettings.AutomationApi, save: false)
+            : Task.CompletedTask;
     }
     private void EnsureAutomationHost()
     {
         if (_automationHost is not null) return;
         _automationService = new(_viewModel, _viewModel.AutomationOwnership, _viewModel.DeviceInput);
-        _automationHost = new(_automationService);
+        _automationHost = new(_automationService, ManageAutomationAsync);
         _automationHost.StateChanged += () =>
         {
             if (Dispatcher.CheckAccess()) UpdateAutomationState();
@@ -77,12 +79,14 @@ public partial class MainWindow
             settings.Validate();
             EnsureAutomationHost();
             await _automationHost!.StopAsync();
+            _automationEffectiveSettings = null;
             if (_shutdownStarted) return;
             if (settings.Enabled)
             {
                 var key = await Task.Run(_automationKeys.LoadOrCreate);
                 if (_shutdownStarted) return;
                 await _automationHost.StartAsync(settings.Clone(), key);
+                _automationEffectiveSettings = settings.Clone();
             }
             if (save && Application.Current is App app)
             {
@@ -93,6 +97,7 @@ public partial class MainWindow
                     app.UpdateSettings.AutomationApi = previous;
                     saveFailed = true;
                     await _automationHost.StopAsync();
+                    _automationEffectiveSettings = null;
                     throw new InvalidOperationException("settings_save_failed");
                 }
             }
@@ -110,14 +115,17 @@ public partial class MainWindow
         if (_shutdownStarted || !await _automationSettingsGate.WaitAsync(0)) return;
         try
         {
+            var runningSettings = AutomationRunning ? _automationEffectiveSettings?.Clone() : null;
             if (_automationHost is not null) await _automationHost.StopAsync();
+            _automationEffectiveSettings = null;
             if (_shutdownStarted) return;
             var key = await Task.Run(_automationKeys.Regenerate);
             if (_shutdownStarted) return;
-            if (Application.Current is App app && app.UpdateSettings.AutomationApi.Enabled)
+            if (runningSettings is not null)
             {
                 EnsureAutomationHost();
-                await _automationHost!.StartAsync(app.UpdateSettings.AutomationApi.Clone(), key);
+                await _automationHost!.StartAsync(runningSettings.Clone(), key);
+                _automationEffectiveSettings = runningSettings;
             }
             UpdateAutomationState();
         }

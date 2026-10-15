@@ -176,6 +176,20 @@ if(IPHONEMIRROR_BUILD_TESTS)
         /W4 /permissive- /utf-8 /EHsc)
     add_test(NAME QtUsbTransportTests COMMAND iPhoneMirror.QtUsbTransport.Tests)
 
+    add_executable(iPhoneMirror.LibUsb0Activation.Tests
+        tests/LibUsb0ActivationTests.cpp
+        src/Transport/LibUsb0Transport.cpp)
+    target_include_directories(iPhoneMirror.LibUsb0Activation.Tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/third_party/libusb/include
+        ${PROJECT_SOURCE_DIR}/third_party/libusb-win32/include)
+    target_compile_definitions(iPhoneMirror.LibUsb0Activation.Tests PRIVATE
+        UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_compile_options(iPhoneMirror.LibUsb0Activation.Tests PRIVATE
+        /W4 /permissive- /utf-8 /EHsc)
+    target_link_libraries(iPhoneMirror.LibUsb0Activation.Tests PRIVATE shell32)
+    add_test(NAME LibUsb0ActivationTests COMMAND iPhoneMirror.LibUsb0Activation.Tests)
+
     add_executable(iPhoneMirror.OutputModeState.Tests
         tests/OutputModeStateTests.cpp)
     target_include_directories(iPhoneMirror.OutputModeState.Tests PRIVATE

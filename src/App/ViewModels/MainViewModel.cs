@@ -119,7 +119,7 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
     private readonly CaptureShutdownCoordinator _shutdownCoordinator = new();
     private readonly DeviceSessionManager _sessions;
     private readonly UsbRestoreRecoveryTracker _usbRestoreRecovery = new();
-    private readonly MediaOutputService _mediaOutput;
+    private readonly MediaOutputCoordinator _mediaOutput;
     private readonly VirtualCameraService _virtualCamera;
     private readonly BluetoothHidMouseService _bluetoothControl = new();
     private readonly DeviceBindingManager _reverseBindings = DeviceBindingManager.Shared;
@@ -1051,11 +1051,22 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
     public bool IsMediaOutputRunning =>
         _mediaOutput.IsRunning || _virtualCamera.IsRunning;
     public bool IsMediaOutputTransitioning => _isMediaOutputTransitioning;
+    public bool IsRecordingMediaOutput => _mediaOutput.IsRecording;
+    public bool CanStopRecording => IsRecordingMediaOutput && !IsMediaOutputTransitioning;
+    public bool CanStopStreaming => _mediaOutput.IsStreaming && !IsMediaOutputTransitioning;
+    private ulong SelectedOutputSessionHandle => IsMediaCasting && IsMediaCastSelected
+        ? MediaCastOutputHandle : CurrentSessionHandle;
+    public bool CanStartRecording => CanStartMediaOutput &&
+        _mediaOutput.CanStart(MediaOutputKind.Recording, SelectedOutputSessionHandle) &&
+        PendingRecordingPath is null;
+    public bool CanStartStreaming => CanStartMediaOutput &&
+        _mediaOutput.CanStart(MediaOutputKind.Rtmp, SelectedOutputSessionHandle);
     public bool CanStopMediaOutput => IsMediaOutputRunning && !IsMediaOutputTransitioning;
     public bool CanStartMediaOutput => (CurrentSessionHandle != 0 ||
         (IsMediaCasting && IsMediaCastSelected &&
          _mediaCastNv12FrameProvider is not null)) &&
-        !IsBusy && !IsMediaOutputRunning &&
+        !IsBusy && !_virtualCamera.IsRunning &&
+        !(_mediaOutput.IsRecording && _mediaOutput.IsStreaming) &&
         !IsMediaOutputTransitioning;
     internal string? PendingRecordingPath =>
         !string.IsNullOrWhiteSpace(_pendingRecordingPath) &&
@@ -1068,7 +1079,7 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         _mediaOutputCapabilities.Supports(MediaOutputKind.Srt);
     public bool CanStreamWhip =>
         _mediaOutputCapabilities.Supports(MediaOutputKind.Whip);
-    public bool CanUseVirtualCamera => CanStartMediaOutput &&
+    public bool CanUseVirtualCamera => CanStartMediaOutput && !IsMediaOutputRunning &&
         (!IsMediaCastSelected || _mediaCastVideoFrameProvider is not null) &&
         _virtualCameraCapabilities.BackendAvailable &&
         _virtualCameraCapabilities.Supported &&
@@ -1190,8 +1201,8 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         _mediaCast = new MediaCastReceiverController(_core, wirelessReceiver,
             () => _wireless.Backend);
         _sessions = new DeviceSessionManager(_core);
-        _mediaOutput = new MediaOutputService(GetOutputNv12Frame,
-            GetOutputAudioPacket);
+        _mediaOutput = new MediaOutputCoordinator(
+            CreateMediaOutputService(), CreateMediaOutputService());
         _mediaOutput.StatusChanged += OnMediaOutputStatusChanged;
         _pendingRecordingPath = PendingRecordingStore.FindLatest();
         _virtualCamera = new VirtualCameraService(GetOutputVideoFrame);
@@ -1533,13 +1544,10 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         var statusDeviceName = Devices.FirstOrDefault(device =>
             DeviceViewModel.UdidEquals(device.Udid, controlDeviceUdid))?.Name ?? "iPhone";
         _bluetoothControlStartSucceeded = false;
-        // A new invocation must not inherit a terminal snapshot from the
-        // previous attempt. Keep an already active same-mode workflow intact
-        // so the toolbar can show the startup details without flickering.
-        if (ControlStatus.Current is not { IsTerminal: false, Mode: ControlStatusMode.Bluetooth })
-            ControlStatus.Begin(ControlStatusMode.Bluetooth, statusDeviceName);
-        ControlStatus.Report(ControlStatusMode.Bluetooth, ControlStage.CheckingBinding,
-            statusDeviceName, LocalizationService.Get("ControlCheckingBluetoothBinding"));
+        // Each start is a new attempt, including starts after configuration.
+        // Reusing a waiting snapshot would mark its unfinished connection step
+        // completed when this attempt returns to the binding check.
+        ControlStatus.Begin(ControlStatusMode.Bluetooth, statusDeviceName);
         if (string.IsNullOrWhiteSpace(controlDeviceUdid) ||
             (!CanEnableBluetoothControlFor(controlDeviceUdid) &&
              !(fromReverseControl && CanStartReverseBluetoothPeripheral)))
@@ -1551,9 +1559,10 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         var savedBinding = GetBluetoothControlBinding(controlDeviceUdid);
         if (!configurationOnly && string.IsNullOrWhiteSpace(savedBinding))
         {
+            var bindingAdvice = LocalizationService.Get("ControlBluetoothBindingAdvice");
             ControlStatus.Failed(ControlStatusMode.Bluetooth, statusDeviceName,
-                LocalizationService.Get("ControlBluetoothBindingRequired"),
-                LocalizationService.Get("ControlBluetoothBindingAdvice"));
+                LocalizationService.Get("ControlBluetoothBindingRequired") + "\n\n" + bindingAdvice,
+                bindingAdvice);
             return;
         }
         if (!await AcknowledgeBluetoothHidReportMapChangeAsync())
@@ -2549,6 +2558,11 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
                     ("error", AppLog.Error(cleanupError)));
             }
             if (cancellationToken.IsCancellationRequested) return;
+            if (error is BridgeUserActionRequiredException { Code: "developer_mode_revealed" })
+            {
+                SetDeveloperModeWaiting(control, device?.Name ?? "iPhone");
+                return;
+            }
             control.ControlStatus.Failed(ControlStatusMode.Usb, device?.Name ?? "iPhone", LocalizationService.Get("ControlStageFailed"), error.Message);
             var message = GetUsbControlFailureMessage(error, bridge);
             control.Failed = true;
@@ -2573,8 +2587,21 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    internal static void SetDeveloperModeWaiting(DeviceControlSession control, string deviceName)
+    {
+        control.Failed = false;
+        control.WiredEnabled = control.WiredConnected = false;
+        control.WiredTarget = null;
+        control.Router.Stop();
+        control.Status = LocalizationService.Get("UsbControlDeveloperModeRevealed");
+        control.ControlStatus.WaitForDeveloperMode(deviceName, control.Status);
+        DiagnosticLogger.ReverseControl("usb", "waiting_for_developer_mode",
+            ("device", AppLog.Device(control.DeviceUdid)));
+    }
+
     private async Task<bool> ConfirmReverseControlPrerequisitesAsync(DeviceControlSession control, bool wireless, CancellationToken cancellationToken)
     {
+        if (AutomationControlStartup.Contains(control.DeviceUdid)) return true;
         var acknowledged = wireless
             ? _wirelessControlPrerequisiteAcknowledged
             : _wiredControlPrerequisiteAcknowledged;
@@ -2789,6 +2816,8 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
             return LocalizationService.Get("UsbControlFailureDeviceLocked");
         if (bridge.LastErrorCode == "developer_mode_required")
             return LocalizationService.Get("UsbControlFailureDeveloperMode");
+        if (bridge.LastErrorCode is "developer_mode_reveal_failed" or "developer_mode_reveal_timeout")
+            return LocalizationService.Get("UsbControlFailureDeveloperModeReveal");
         if (string.Equals(bridge.LastErrorCode, "developer_image_required",
                 StringComparison.OrdinalIgnoreCase))
             return LocalizationService.Get("UsbControlFailureImageRequired");
@@ -5202,19 +5231,27 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         return null;
     }
 
-    private Nv12VideoFrame? GetOutputNv12Frame(ulong handle, uint width,
+    private MediaOutputService CreateMediaOutputService()
+    {
+        var reader = _core.CreateOutputReader();
+        return new MediaOutputService(
+            (handle, width, height) => GetOutputNv12Frame(reader, handle, width, height),
+            (handle, afterSequence) => GetOutputAudioPacket(reader, handle, afterSequence));
+    }
+
+    private Nv12VideoFrame? GetOutputNv12Frame(NativeOutputReader reader, ulong handle, uint width,
         uint height) => handle == MediaCastOutputHandle
             ? _mediaCastNv12FrameProvider?.Invoke(width, height)
-            : _core.GetDeviceOutputNv12Frame(FindSessionHandleByRaw(handle), width, height);
+            : reader.GetVideoFrame(FindSessionHandleByRaw(handle), width, height);
 
     private VideoFrame? GetOutputVideoFrame(ulong handle, uint width,
         uint height) => handle == MediaCastOutputHandle
             ? _mediaCastVideoFrameProvider?.Invoke(width, height)
             : _core.GetDeviceOutputFrame(FindSessionHandleByRaw(handle), width, height);
 
-    private AudioPacket? GetOutputAudioPacket(ulong handle, ulong afterSequence) =>
+    private AudioPacket? GetOutputAudioPacket(NativeOutputReader reader, ulong handle, ulong afterSequence) =>
         handle == MediaCastOutputHandle ? _mediaCastAudioPacketProvider?.Invoke(afterSequence) :
-            _core.GetDeviceOutputAudioPacket(FindSessionHandleByRaw(handle), afterSequence);
+            reader.GetAudioPacket(FindSessionHandleByRaw(handle), afterSequence);
 
     internal void UpdateMediaCastStatistics(uint width, uint height, bool audioEnabled)
     {
@@ -5420,8 +5457,9 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
     }
 
     internal async Task<(bool Success, ulong Handle, bool Created, string Message)> StartBackgroundSessionAsync(
-        DeviceViewModel device)
+        DeviceViewModel device, CancellationToken cancellation = default)
     {
+        cancellation.ThrowIfCancellationRequested();
         if (_disposed)
             return (false, 0, false, LocalizationService.Get("CaptureStopped"));
 
@@ -5433,9 +5471,10 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         // Reusing an active session must not enumerate USB again. During
         // QuickTime capture the device can temporarily disappear from normal
         // enumeration even though its existing native handle remains valid.
-        await _coreGate.WaitAsync();
+        await _coreGate.WaitAsync(cancellation);
         try
         {
+            cancellation.ThrowIfCancellationRequested();
             if (_disposed)
                 return (false, 0, false, LocalizationService.Get("CaptureStopped"));
             if (_sessions.TryGet(device.Udid, out var existing) && existing.HasSession)
@@ -5453,7 +5492,8 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
                     ("reason", "usb_restore_reenumeration_required")));
                 return (false, 0, false, recoveryMessage);
             }
-            var preflight = await EnsureSourceReadyAsync(device);
+            var preflight = await EnsureSourceReadyAsync(device, cancellation);
+            cancellation.ThrowIfCancellationRequested();
             if (!preflight.Success)
             {
                 AddDiagnosticLog(AppLog.Event("independent_session_preflight_failed",
@@ -5478,7 +5518,12 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
             NativeSessionCreateResult result;
             try
             {
-                result = await Task.Run(() => CreateSession(device, startSettings));
+                result = await _sessions.CreateAsync(() => CreateSession(device, startSettings), cancellation);
+            }
+            catch (UsbConfigurationRestoreWarningException)
+            {
+                _usbRestoreRecovery.MarkRecoveryRequired(device.Udid);
+                throw;
             }
             finally
             {
@@ -5962,8 +6007,9 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
 
     private async Task<(bool Success, int ErrorCode,
         CaptureFailureKind FailureKind, string Message)> EnsureSourceReadyAsync(
-        DeviceViewModel device)
+        DeviceViewModel device, CancellationToken cancellation = default)
     {
+        cancellation.ThrowIfCancellationRequested();
         if (device.IsWireless)
         {
             if (!_wireless.IsAvailable || !_wireless.Running)
@@ -5986,7 +6032,9 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         // start performs the one authoritative exact-device open after this
         // check; doing it here as well would enumerate the legacy filter twice
         // and could touch an already-streaming device in a multi-device setup.
-        var driverStatus = await Task.Run(() => _filterDriver.Inspect(device.Udid));
+        var driverStatus = await Task.Run(() => _filterDriver.Inspect(device.Udid), cancellation)
+            .WaitAsync(cancellation);
+        cancellation.ThrowIfCancellationRequested();
         if (DeviceViewModel.UdidEquals(SelectedDevice?.Udid, device.Udid))
         {
             _filterDriverStatus = driverStatus;
@@ -6013,7 +6061,9 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         if (driverStatus.State is IPhoneFilterDriverState.PendingRestart or
             IPhoneFilterDriverState.Missing or IPhoneFilterDriverState.InvalidStack or
             IPhoneFilterDriverState.Error)
-            OpenDriverManager(automatic: true);
+        {
+            if ((Application.Current as App)?.AutomationBackground != true) OpenDriverManager(automatic: true);
+        }
         var errorCode = (int)NativeResult.CaptureBackendUnavailable;
         var failureKind = driverStatus.State == IPhoneFilterDriverState.NoDevice
             ? CaptureFailureKind.UsbConnection
@@ -6727,10 +6777,12 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         if (string.Equals(_pendingRecordingPath, path,
                 StringComparison.OrdinalIgnoreCase))
             _pendingRecordingPath = PendingRecordingStore.FindLatest();
+        NotifyMediaOutputStateChanged();
     }
 
     internal bool DiscardPendingRecording()
     {
+        if (IsRecordingMediaOutput) return false;
         var path = PendingRecordingPath;
         if (path is null) return false;
         try
@@ -6738,6 +6790,7 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
             File.Delete(path);
             _pendingRecordingPath = PendingRecordingStore.FindLatest();
             OnPropertyChanged(nameof(PendingRecordingPath));
+            NotifyMediaOutputStateChanged();
             return true;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
@@ -6931,6 +6984,29 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    internal async Task StopRecordingAsync() =>
+        await StopSingleMediaOutputAsync(MediaOutputKind.Recording);
+
+    internal async Task StopStreamingAsync() =>
+        await StopSingleMediaOutputAsync(MediaOutputKind.Rtmp);
+
+    private async Task StopSingleMediaOutputAsync(MediaOutputKind kind)
+    {
+        await _mediaOutputGate.WaitAsync();
+        SetMediaOutputTransitioning(true);
+        try
+        {
+            await _mediaOutput.StopAsync(kind);
+            if (!IsMediaOutputRunning) _mediaOutputUdid = null;
+            NotifyMediaOutputStateChanged();
+        }
+        finally
+        {
+            SetMediaOutputTransitioning(false);
+            _mediaOutputGate.Release();
+        }
+    }
+
     private async Task StopMediaOutputForSessionAsync(string udid)
     {
         await _mediaOutputGate.WaitAsync();
@@ -6998,7 +7074,7 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         try
         {
             await EnsureMediaOutputCapabilitiesAsync();
-            if (IsMediaOutputRunning)
+            if (_virtualCamera.IsRunning)
                 return (false, LocalizationService.Get("MediaOutputAlreadyRunning"));
             var handle = CurrentSessionHandle;
             var device = SelectedDevice;
@@ -7012,6 +7088,9 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
                 (mediaCast && _mediaCastNv12FrameProvider is null))
                 return (false, LocalizationService.Get("MediaOutputNoSession"));
             if (mediaCast) handle = MediaCastOutputHandle;
+            if (!_mediaOutput.CanStart(request.Kind, handle) ||
+                (request.Kind == MediaOutputKind.Recording && PendingRecordingPath is not null))
+                return (false, LocalizationService.Get("MediaOutputAlreadyRunning"));
             await _mediaOutput.StartAsync(handle, request, _mediaOutputCapabilities,
                 _shutdownCancellation.Token);
             if (_disposed || !DeviceViewModel.UdidEquals(SelectedDevice?.Udid,
@@ -7020,7 +7099,7 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
                   !ReferenceEquals(expectedState, currentState) ||
                   currentState.Handle?.RawHandle != handle)))
             {
-                await _mediaOutput.StopAsync();
+                await _mediaOutput.StopAsync(request.Kind);
                 var staleMessage = LocalizationService.Get("MediaOutputNoSession");
                 SetMediaOutputStatus(staleMessage, "Failed");
                 AddDiagnosticLog(AppLog.Event("media_output_start_invalidated",
@@ -7029,7 +7108,9 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
                 return (false, staleMessage);
             }
             _mediaOutputUdid = device.Udid;
-            SetMediaOutputStatus(LocalizationService.Format(
+            SetMediaOutputStatus(_mediaOutput.IsRecording && _mediaOutput.IsStreaming
+                ? LocalizationService.Get("MediaOutputRecordingAndStreaming")
+                : LocalizationService.Format(
                 request.Kind == MediaOutputKind.Recording
                     ? "MediaOutputRecordingFormat"
                     : "MediaOutputStreamingFormat",
@@ -7069,10 +7150,22 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
             _ = dispatcher.BeginInvoke(() => OnMediaOutputStatusChanged(message, failed));
             return;
         }
+        // Child events can be queued before another output starts/stops.
+        // Resolve success state on the UI thread instead of replaying an old
+        // "Stopped" event over a still-running output.
+        if (!failed && message is "Recording" or "Live" or "RecordingAndLive" or "Stopped")
+            message = (_mediaOutput.IsRecording, _mediaOutput.IsStreaming) switch
+            {
+                (true, true) => "RecordingAndLive",
+                (true, false) => "Recording",
+                (false, true) => "Live",
+                _ => _virtualCamera.IsRunning ? "VirtualCamera" : "Stopped",
+            };
         var localized = message switch
         {
             "Recording" => LocalizationService.Get("MediaOutputRecording"),
             "Live" => LocalizationService.Get("MediaOutputStreaming"),
+            "RecordingAndLive" => LocalizationService.Get("MediaOutputRecordingAndStreaming"),
             "VirtualCamera" => LocalizationService.Get("VirtualCameraRunning"),
             "Stopped" => LocalizationService.Get("MediaOutputStopped"),
             _ => message,
@@ -7093,6 +7186,11 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(IsMediaOutputTransitioning));
         OnPropertyChanged(nameof(CanStopMediaOutput));
         OnPropertyChanged(nameof(CanStartMediaOutput));
+        OnPropertyChanged(nameof(IsRecordingMediaOutput));
+        OnPropertyChanged(nameof(CanStartRecording));
+        OnPropertyChanged(nameof(CanStartStreaming));
+        OnPropertyChanged(nameof(CanStopRecording));
+        OnPropertyChanged(nameof(CanStopStreaming));
         OnPropertyChanged(nameof(CanUseVirtualCamera));
         OnPropertyChanged(nameof(CanInstallVirtualCamera));
         OnPropertyChanged(nameof(CanUninstallVirtualCamera));
@@ -7454,8 +7552,8 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
     {
         try
         {
-            await _mediaOutput.DisposeAsync();
-            await _virtualCamera.DisposeAsync();
+            try { await _mediaOutput.DisposeAsync(); }
+            finally { await _virtualCamera.DisposeAsync(); }
         }
         catch (Exception error)
         {

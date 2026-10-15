@@ -5,15 +5,17 @@ using IPhoneMirror.App.Localization;
 
 namespace IPhoneMirror.App.Services;
 
-internal sealed record CompactLaunchOptions(bool Enabled, string? DeviceId)
+internal sealed record CompactLaunchOptions(bool Enabled, string? DeviceId, bool AutomationBackground = false)
 {
     internal static CompactLaunchOptions Parse(IReadOnlyList<string> arguments)
     {
         var enabled = false;
+        var background = false;
         string? device = null;
         for (var index = 0; index < arguments.Count; ++index)
         {
-            if (arguments[index] == "--compact") enabled = true;
+            if (arguments[index] == "--automation-background") { enabled = true; background = true; }
+            else if (arguments[index] == "--compact") enabled = true;
             else if (arguments[index] == "--device")
             {
                 if (++index >= arguments.Count || string.IsNullOrWhiteSpace(arguments[index]) ||
@@ -23,7 +25,7 @@ internal sealed record CompactLaunchOptions(bool Enabled, string? DeviceId)
                 enabled = true;
             }
         }
-        return new(enabled, device);
+        return new(enabled, device, background);
     }
 
     internal int SelectDevice(IReadOnlyList<string> availableIds)

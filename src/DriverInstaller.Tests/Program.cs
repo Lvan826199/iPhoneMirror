@@ -51,6 +51,7 @@ Run("isolated driver host keeps result logs and rollback backups in the machine 
 });
 Run("confirmed parent driver changes and recovery", ParentDriverTests.Run);
 Run("driver failure recovery and download deadlines", DriverFailureTests.Run);
+Run("Apple Devices USBMux readiness and port conflicts", AppleMuxSupportTests.Run);
 
 Run("localized culture mapping", () =>
 {

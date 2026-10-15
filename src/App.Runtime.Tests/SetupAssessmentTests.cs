@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Windows;
@@ -169,6 +169,7 @@ internal static partial class Program
             {
                 receiverHealthy = false; store.Save(state);
                 var window = new FirstRunSetupWindow(vm, store) { CheckRuntime = runtime };
+                window.Loaded += (_, _) => _ = Call(window, "CheckSettingsAsync");
                 window.Closed += (_, _) => app.Shutdown();
                 app.Run(window);
                 return 0;
@@ -179,8 +180,8 @@ internal static partial class Program
                 typeof(LocalizationService).GetMethod("ApplyLanguage", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, [culture, false, false]);
                 ThemeService.Apply(theme); store.Save(state);
                 receiverGate = new();
-                var window = new FirstRunSetupWindow(vm, store, rerun: true) { CheckRuntime = runtime };
-                window.Show();
+                var window = new FirstRunSetupWindow(vm, store) { CheckRuntime = runtime };
+                window.Show(); _ = Call(window, "CheckSettingsAsync");
                 var rows = (System.Collections.IDictionary)typeof(FirstRunSetupWindow).GetField("_checkRows", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
                 var progressTimer = Stopwatch.StartNew();
                 while ((!rows.Contains("receiver") || progressTimer.ElapsedMilliseconds < 350) && progressTimer.Elapsed < TimeSpan.FromSeconds(5)) { Pump(); Thread.Sleep(2); }
@@ -196,8 +197,8 @@ internal static partial class Program
                 var finalPosition = ((FrameworkElement)liveCard).TranslatePoint(new Point(), window);
                 Check(Math.Abs(cardPosition.Y - finalPosition.Y) < 1, $"Assessment card moved when checking completed: {cardPosition.Y} -> {finalPosition.Y}.");
                 Check(((TextBlock)window.FindName("Heading")).Text == LocalizationService.Get("SetupCheckReady"), "Opening completed setup restarted the wizard.");
-                Check(((ScrollViewer)window.FindName("Scroller")).ScrollableHeight <= 1, "Default check summary requires scrolling.");
                 Capture(window, $"check-{culture}-{theme}");
+                Check(((ScrollViewer)window.FindName("Scroller")).ScrollableHeight <= 1, $"Default check summary requires scrolling: {((ScrollViewer)window.FindName("Scroller")).ScrollableHeight}.");
                 receiverHealthy = false;
                 Complete(Call(window, "CheckSettingsAsync"));
                 Capture(window, $"attention-{culture}-{theme}");
@@ -209,7 +210,7 @@ internal static partial class Program
             receiverHealthy = false; store.Save(state);
             bindings.Unbind(profile.Id, DeviceIdentityType.AirPlay);
             var partial = new FirstRunSetupWindow(vm, store) { CheckRuntime = runtime };
-            partial.Show(); Settled(partial);
+            partial.Show(); _ = Call(partial, "CheckSettingsAsync"); Settled(partial);
             Complete(Call(partial, "ContinueAssessmentAsync"));
             Check(partial.State.Step == SetupStep.WirelessBackend, "Partial setup did not jump directly to missing receiver.");
             bool SummaryVisible(FirstRunSetupWindow window) => (bool)typeof(FirstRunSetupWindow).GetField("_assessmentVisible", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
@@ -236,8 +237,8 @@ internal static partial class Program
             Close(partial);
             receiverHealthy = false;
             var reopened = new FirstRunSetupWindow(vm, store) { CheckRuntime = runtime };
-            reopened.Show(); Settled(reopened);
-            Check(reopened.AssessmentResults.Single(r => r.Id == "receiver").State == SetupState.Invalid, "Reopening skipped real checks.");
+            reopened.Show(); _ = Call(reopened, "CheckSettingsAsync"); Settled(reopened);
+            Check(reopened.AssessmentResults.Single(r => r.Id == "receiver").State == SetupState.Invalid, "Explicit diagnostics skipped real checks.");
             Complete(Call(reopened, "ContinueAssessmentAsync"));
             beforeRefresh = ProbeCounts();
             typeof(FirstRunSetupWindow).GetMethod("SkipCurrentStep", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(reopened, null);
@@ -247,21 +248,21 @@ internal static partial class Program
             Close(reopened);
             receiverHealthy = true;
             var repaired = new FirstRunSetupWindow(vm, store) { CheckRuntime = runtime };
-            repaired.Show(); Settled(repaired);
+            repaired.Show(); _ = Call(repaired, "CheckSettingsAsync"); Settled(repaired);
             Check(repaired.AssessmentResults.All(r => !r.NeedsAttention), "An externally repaired component was not recognized on reentry.");
             Complete(Call(repaired, "ContinueAssessmentAsync"));
             Check(store.Load().Disposition == SetupDisposition.Completed, "Completion did not persist after verified repair.");
             var waiting = new TaskCompletionSource<SetupSettingsEvidence>();
             store.Save(state);
             var cancelled = new FirstRunSetupWindow(vm, store) { CheckRuntime = new() { ReadSettingsAsync = _ => waiting.Task } };
-            cancelled.Show(); Pump();
+            cancelled.Show(); _ = Call(cancelled, "CheckSettingsAsync"); Pump();
             Check(cancelled.IsAssessing, "Real asynchronous check did not show checking state.");
             Close(cancelled); Check(vm.SetupActive, "Close released ownership while a check was still running.");
             waiting.SetResult(new(settings)); Settled(cancelled);
             Check(!vm.SetupActive, "Cancelled check retained ownership after cleanup.");
             receiverHealthy = false; store.Save(state);
             var localClose = new FirstRunSetupWindow(vm, store) { CheckRuntime = runtime };
-            localClose.Show(); Settled(localClose); Complete(Call(localClose, "ContinueAssessmentAsync"));
+            localClose.Show(); _ = Call(localClose, "CheckSettingsAsync"); Settled(localClose); Complete(Call(localClose, "ContinueAssessmentAsync"));
             receiverGate = new();
             var refreshPending = Call(localClose, "AdvancePendingTasksAsync", false); Pump();
             Check(localClose.IsAssessing && !SummaryVisible(localClose), "Targeted verification returned to the full scan screen.");
@@ -269,7 +270,7 @@ internal static partial class Program
             receiverGate.SetResult(new(WirelessRuntimeProbeStatus.Ready, 0)); receiverGate = null;
             Complete(refreshPending); Check(!vm.SetupActive, "Targeted verification retained ownership after close.");
             Console.WriteLine("PASS scoped probe counts, direct task advancement, no scan on skip/back, failed repair stays inline and targeted-check close ownership.");
-            Console.WriteLine("PASS check-on-open, direct repair navigation, explicit full configuration, responsive async close, 4 languages and 2 themes.");
+            Console.WriteLine("PASS explicitly invoked diagnostics, direct repair navigation, explicit full configuration, responsive async close, 4 languages and 2 themes.");
         }
         finally { app.Shutdown(); }
         return 0;

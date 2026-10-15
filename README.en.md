@@ -473,6 +473,9 @@ See [protocol](docs/PROTOCOL.md), [architecture](docs/ARCHITECTURE.md),
 [WASAPI audio](docs/WASAPI_AUDIO.md) documentation. Planned work is tracked in
 the [upgrade roadmap](docs/ROADMAP.md); roadmap items are not implemented features.
 
+For scripted device inspection and control, see the
+[local HTTP API](docs/api/README.md) and its Python and curl examples.
+
 ## Current limitations
 
 - Built-in recording and RTMP, SRT, and WebRTC/WHIP output include source audio when the audio track and required encoder are available, and otherwise start immediately as video-only output; MP4, RTMP, and SRT encode AAC while WHIP encodes Opus.

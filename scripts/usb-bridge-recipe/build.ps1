@@ -97,8 +97,15 @@ try {
         throw "PyInstaller did not produce the USB touch bridge: $Bridge"
     }
     Write-BridgeRuntimeManifest $BridgeDirectory
-    & $Bridge --check-runtime
+    $runtimeOutput = & $Bridge --check-runtime
     if ($LASTEXITCODE -ne 0) { throw 'Packaged USB bridge runtime dependency check failed.' }
+    $runtimeReport = ($runtimeOutput -join "`n") | ConvertFrom-Json
+    if ($runtimeReport.runtime -ne 'ready' -or
+        'pymobiledevice3.services.cryptexd' -notin @($runtimeReport.modules) -or
+        'cryptex_owned_channels' -notin @($runtimeReport.functional_checks)) {
+        throw 'Packaged USB bridge is missing the required Cryptex lifecycle capability.'
+    }
+    Write-Output ($runtimeOutput -join "`n")
 
     if (-not [string]::IsNullOrWhiteSpace($BridgeOutputPath)) {
         $BridgeOutputPath = [IO.Path]::GetFullPath($BridgeOutputPath)

@@ -1395,8 +1395,8 @@ struct D3D11PreviewRenderer::Impl {
 
         const auto packed_limit = render_size_limit.load(std::memory_order_relaxed);
         auto [limited_width, limited_height] = limited_render_size(frame);
-        if (swaps_axes) std::swap(limited_width, limited_height);
         const bool cap_reduces_source = limited_width < frame.width || limited_height < frame.height;
+        if (swaps_axes) std::swap(limited_width, limited_height);
         const bool use_limited_pass = packed_limit != 0 && cap_reduces_source &&
             (viewport.Width > static_cast<float>(limited_width) + 0.5F ||
              viewport.Height > static_cast<float>(limited_height) + 0.5F);

@@ -91,8 +91,10 @@ internal sealed class MultiDevicePreviewManager : IDisposable
     internal bool IsFullScreen(string udid) =>
         _windows.TryGetValue(udid, out var window) && window.IsFullScreen;
 
-    internal Task<(bool Success, string Message)> ShowAsync(DeviceViewModel device)
+    internal Task<(bool Success, string Message)> ShowAsync(DeviceViewModel device,
+        CancellationToken cancellation = default)
     {
+        cancellation.ThrowIfCancellationRequested();
         viewModel.AddDiagnosticLog(AppLog.Event("independent_preview_show_requested",
             ("device", AppLog.Device(device.Udid)),
             ("kind", device.IsWireless ? "wireless" : "wired"),
@@ -114,9 +116,11 @@ internal sealed class MultiDevicePreviewManager : IDisposable
             _windows.Remove(device.Udid);
             existing.Dispose();
         }
-        if (_opening.TryGetValue(device.Udid, out var pending)) return pending;
+        // A joining request may stop waiting, but does not own another
+        // caller's window/session creation and must not cancel it.
+        if (_opening.TryGetValue(device.Udid, out var pending)) return pending.WaitAsync(cancellation);
 
-        var opening = ShowCoreAsync(device);
+        var opening = ShowCoreAsync(device, cancellation);
         _opening[device.Udid] = opening;
         return CompleteOpeningAsync(device.Udid, opening);
     }
@@ -135,9 +139,16 @@ internal sealed class MultiDevicePreviewManager : IDisposable
         }
     }
 
-    private async Task<(bool Success, string Message)> ShowCoreAsync(DeviceViewModel device)
+    private async Task<(bool Success, string Message)> ShowCoreAsync(DeviceViewModel device,
+        CancellationToken cancellation)
     {
-        var started = await viewModel.StartBackgroundSessionAsync(device);
+        var started = await viewModel.StartBackgroundSessionAsync(device, cancellation);
+        if (cancellation.IsCancellationRequested)
+        {
+            if (started.Created)
+                await viewModel.StopDeviceSessionAsync(device.Udid, started.Handle);
+            cancellation.ThrowIfCancellationRequested();
+        }
         if (!started.Success)
         {
             viewModel.AddDiagnosticLog(AppLog.Event("independent_preview_session_failed",

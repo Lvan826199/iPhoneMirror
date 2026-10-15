@@ -63,9 +63,14 @@ internal sealed record AppleSupportStatus(
     string? ServiceName,
     bool UsbDriverInstalled,
     string? UsbDriverInf,
-    string Diagnostic)
+    string Diagnostic,
+    bool MuxAvailable = false,
+    bool MuxPortOccupied = false,
+    string? MuxListener = null)
 {
-    internal bool Ready => ServiceInstalled && ServiceRunning && UsbDriverInstalled;
+    internal bool HasMuxConflict => MuxPortOccupied && !MuxAvailable;
+    internal bool Ready => UsbDriverInstalled && !HasMuxConflict &&
+        (MuxAvailable || (ServiceInstalled && ServiceRunning));
 }
 
 internal sealed record LibUsbStackStatus(

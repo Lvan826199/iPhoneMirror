@@ -49,6 +49,7 @@ class BridgeRuntimeCheckTests(unittest.TestCase):
             'xpc_roundtrip', 'five_slot_hid_reports', 'simultaneous_contacts_independent_release',
             'quic_initial_encryption',
             'aes_gcm_roundtrip', 'lzfse_roundtrip', 'ca_store', 'ddi_async_http_transport',
+            'cryptex_owned_channels',
         ], check_runtime_functionality(build_touchscreen_report,
                                        TOUCHSCREEN_STATE_CONTACT, TOUCHSCREEN_STATE_RELEASE, build_touchscreen_frame))
 

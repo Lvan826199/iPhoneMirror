@@ -41,6 +41,7 @@
     <system:String x:Key="DeviceBindingModelUnknown">暫無型號資料</system:String>
     <system:String x:Key="DeviceBindingUnnamedDevice">未命名裝置</system:String>
     <system:String x:Key="DeviceBindingCreateFailed">無法建立裝置檔案。</system:String>
+    <system:String x:Key="DeviceBindingSaveFailed">無法儲存裝置綁定，請重試。</system:String>
     <system:String x:Key="DeviceBindingRenamePrompt">輸入裝置檔案名稱</system:String>
     <system:String x:Key="DeviceBindingRenameTitle">重新命名裝置檔案</system:String>
     <system:String x:Key="DeviceBindingDeleteConfirmation">刪除此裝置檔案將解除所有已綁定的 USB、AirPlay 和 Bluetooth 身份。是否繼續？</system:String>
@@ -97,6 +98,9 @@
     <system:String x:Key="UsbControlFailureNotTrusted">此 iPhone 尚未信任目前 Windows 帳戶。請保持手機解鎖，重新插拔數據線並在手機上點按「信任」。</system:String>
     <system:String x:Key="UsbControlFailureDeviceLocked">iPhone 目前處於鎖定狀態或正在等待輸入密碼。請解鎖手機並保持亮屏，如有「信任此電腦」或密碼提示請先在手機上完成，然後重新啟動反向控制。</system:String>
     <system:String x:Key="UsbControlFailureDeveloperMode">此裝置未開啟開發者模式。請在 iPhone/iPad 的「設定 &gt; 私隱與安全性 &gt; 開發者模式」中開啟並重新啟動裝置後重試。</system:String>
+    <system:String x:Key="UsbControlDeveloperModeRevealed">裝置已確認顯示「開發者模式」開關的請求。請在 iPhone/iPad 的「設定 &gt; 私隱與安全性 &gt; 開發者模式」中開啟，依提示重新啟動並在手機上確認開啟，再回到此視窗點選「重試」。若設定頁面已開啟，請離開後重新進入。</system:String>
+    <system:String x:Key="ControlStageWaitingForDeveloperMode">等待在手機上開啟開發者模式</system:String>
+    <system:String x:Key="UsbControlFailureDeveloperModeReveal">無法確認「開發者模式」開關已顯示。請解鎖 iPhone/iPad、完成「信任此電腦」並檢查 USB 連接後重試；若設定中已有該開關，也可手動開啟、重新啟動並確認。</system:String>
     <system:String x:Key="UsbControlFailureImageRequired">裝置尚未掛載 Personalized Developer Disk Image。請使用與裝置系統匹配的官方 Xcode 開發者映像檔完成掛載後重試。</system:String>
     <system:String x:Key="UsbControlFailureImageDownload">開發者映像檔下載失敗或逾時。請檢查 GitHub 網絡連線後重試，也可透過 IPHONE_MIRROR_DDI_DIR 提供官方本機映像檔。</system:String>
     <system:String x:Key="UsbControlFailureImageCache">無法儲存開發者映像檔快取。請檢查使用者目錄所在磁碟的剩餘空間與寫入權限，確認安全軟件未阻擋寫入後重試。</system:String>
@@ -292,7 +296,7 @@
     <system:String x:Key="ReverseControlErrorBodyFormat">{0}反向控制發生錯誤：{1}</system:String>
     <system:String x:Key="ReverseControlPrerequisiteStatus">請確認準備工作後繼續</system:String>
     <system:String x:Key="ReverseControlPrerequisiteWiredTitle">啟用有線控制前請確認</system:String>
-    <system:String x:Key="ReverseControlPrerequisiteWiredBody" xml:space="preserve">1. 開啟「開發者模式」並重新啟動裝置。&#xA;2. 使用 USB 連接裝置，解鎖並點選「信任此電腦」。&#xA;3. 首次使用會從 GitHub 下載相符的 DDI。&#xA;4. 準備完成前不會傳送輸入。&#xA;&#xA;完成後點選「繼續」，否則點選「取消」。</system:String>
+    <system:String x:Key="ReverseControlPrerequisiteWiredBody" xml:space="preserve">1. 使用 USB 連接裝置，解鎖並點選「信任此電腦」。&#xA;2. 點選「繼續」後會自動請求顯示「開發者模式」開關。&#xA;3. 若尚未開啟，請依提示在手機設定中開啟、重新啟動並確認，再回來重試。&#xA;4. 首次使用會從 GitHub 下載相符的 DDI，準備完成前不會傳送輸入。&#xA;&#xA;連接並信任後點選「繼續」，否則點選「取消」。</system:String>
     <system:String x:Key="ReverseControlPrerequisiteWirelessTitle">啟用無線控制前請確認</system:String>
     <system:String x:Key="ReverseControlPrerequisiteWirelessBody" xml:space="preserve">1. 開啟「開發者模式」並重新啟動裝置。&#xA;2. 先透過 USB 完成信任和無線配對。&#xA;3. 保持裝置解鎖，並連接同一區域網絡。&#xA;4. 允許 iPhoneMirror 通過 Windows 防火牆通訊。&#xA;&#xA;完成後點選「繼續」，否則點選「取消」。</system:String>
     <system:String x:Key="BluetoothControlReportMapChangedTitle">藍牙控制需要重新配對</system:String>
@@ -532,9 +536,9 @@
     <system:String x:Key="Apply">套用</system:String>
     <system:String x:Key="AdvancedSettings">進階設定</system:String>
     <system:String x:Key="AdvancedSettingsTitle">進階 USB 設定</system:String>
-    <system:String x:Key="AdvancedSettingsIntro">此設定只套用至目前選取的裝置，並直接寫入 QuickTime USB 解像度請求。</system:String>
+    <system:String x:Key="AdvancedSettingsIntro">此設定只套用至目前選取有線裝置的 B AirPlay 實驗模式。</system:String>
     <system:String x:Key="AdvancedUsbResolution">USB 請求解像度</system:String>
-    <system:String x:Key="AdvancedUsbResolutionHelp">輸入例如 1920×1080。套用後將忽略一般畫面預設；關閉進階模式後還原一般預設。</system:String>
+    <system:String x:Key="AdvancedUsbResolutionHelp">按闊度、高度輸入裝置面板像素，例如 12.9 吋 iPad Pro 為闊 2048、高 2732。實際輸出由裝置決定，請查看實際解像度；畫面設定中的「原始」只取消本機繪製尺寸限制。</system:String>
     <system:String x:Key="WidthLabel">寬度</system:String>
     <system:String x:Key="HeightLabel">高度</system:String>
     <system:String x:Key="DisableAdvancedMode">關閉進階模式</system:String>
@@ -758,7 +762,7 @@
     <system:String x:Key="VirtualCameraUninstalled">虛擬攝影機元件已解除安裝。</system:String>
     <system:String x:Key="VirtualCameraUninstallStillDetected">解除安裝程式已結束，但 Windows 仍偵測到虛擬攝影機元件。</system:String>
     <system:String x:Key="VirtualCameraUninstallFailedFormat">無法解除安裝虛擬攝影機元件：{0}</system:String>
-    <system:String x:Key="MediaOutputAlreadyRunning">請先停止目前媒體輸出任務。</system:String>
+    <system:String x:Key="MediaOutputAlreadyRunning">同一投屏可同時錄影及直播。請先停止同類輸出，切換來源前請停止所有輸出；虛擬鏡頭需獨立使用。</system:String>
     <system:String x:Key="RecordingPendingSave">上一段錄製已完成但尚未儲存，請先選擇儲存位置和檔案名稱。</system:String>
     <system:String x:Key="RecordingSavedFormat">錄製已儲存到：{0}</system:String>
     <system:String x:Key="RecordingSaveFailedFormat">無法儲存錄製檔案：{0}</system:String>
@@ -1025,6 +1029,7 @@
     <system:String x:Key="TouchBridgeNotReady">USB 觸控橋接器尚未就緒。</system:String>
     <system:String x:Key="ClipboardTextTooLarge">文字過長，無法一次貼上。請縮短文字後重試。</system:String>
     <system:String x:Key="ClipboardPasteFailed">貼上到 iPhone 失敗，請重試。</system:String>
+    <system:String x:Key="RemoteTextClipboardUnavailable">遠端文字未能輸入：手機剪貼簿服務暫時無法使用。請解鎖 iPhone 並重新連接有線／無線控制後重試。</system:String>
     <system:String x:Key="TouchBridgeInvalidBatch">觸控批次必須包含 1 至 5 個觸點。</system:String>
     <system:String x:Key="TouchBridgeInvalidPointId">觸點編號必須為非負整數。</system:String>
     <system:String x:Key="TouchBridgeInvalidCoordinates">觸點座標必須是 0 至 1 之間的有限數值。</system:String>
@@ -1589,4 +1594,30 @@
     <system:String x:Key="SetupCheckDisplay">投影偏好</system:String>
     <system:String x:Key="SetupCheckRunning">正在檢查</system:String>
     <system:String x:Key="SetupCheckWaiting">等待檢查</system:String>
+    <system:String x:Key="SetupToolsDriverHint">安裝和修復 Apple 支援元件與 USB 驅動程式。</system:String>
+    <system:String x:Key="SetupToolsBindingHint">在獨立視窗中管理有線、AirPlay 和藍牙識別。</system:String>
+    <system:String x:Key="SetupToolsOpen" xml:space="preserve">開啟獨立視窗  ↗</system:String>
+    <system:String x:Key="SetupToolsReturnHint">在對應視窗中完成操作。關閉後會自動檢查結果，也可以稍後繼續。</system:String>
+    <system:String x:Key="SetupToolsDriverWaiting">驅動管理器已開啟，請在該視窗中操作。取消等待不會中斷安裝。</system:String>
+    <system:String x:Key="SetupToolsBindingWaiting">請在裝置綁定器中選擇裝置並完成綁定。</system:String>
+    <system:String x:Key="SetupToolsChecking">正在檢查實際設定…</system:String>
+    <system:String x:Key="SetupToolsIncomplete">此項尚未完成。可以重新開啟對應工具，或稍後再設定。</system:String>
+    <system:String x:Key="SetupToolsBluetoothStarting">正在準備藍牙連線…</system:String>
+    <system:String x:Key="SetupToolsReceiverStarting">正在準備 AirPlay 接收器…</system:String>
+    <system:String x:Key="DeviceBindingWorkspaceHint">一台裝置，一個檔案。讓每種連線方式都對應到正確的 iPhone。</system:String>
+    <system:String x:Key="DeviceBindingSidebarHint">USB 連線後會自動建立裝置檔案。無線裝置可透過右上方的 + 新增。</system:String>
+    <system:String x:Key="DeviceBindingEmptyList">尚無裝置檔案</system:String>
+    <system:String x:Key="DeviceBindingEmptyTitle">連接你的第一台 iPhone</system:String>
+    <system:String x:Key="DeviceBindingEmptyHint">使用傳輸線連接並解鎖 iPhone，點一下「信任」。也可以先啟動 AirPlay，在手機上選擇螢幕鏡像輸出後新增裝置。</system:String>
+    <system:String x:Key="DeviceBindingStartAirPlay">啟動 AirPlay 接收</system:String>
+    <system:String x:Key="DeviceBindingAirPlayReady">AirPlay 已就緒。在 iPhone 控制中心開啟「螢幕鏡像輸出」，選擇這台電腦。</system:String>
+    <system:String x:Key="DeviceBindingSavedFeedback">綁定已儲存</system:String>
+    <system:String x:Key="DeviceBindingWiredBrief">使用傳輸線連接並解鎖 iPhone，在手機上點一下「信任」。</system:String>
+    <system:String x:Key="DeviceBindingAirPlayBrief">連接同一 Wi-Fi，開啟 iPhone 的「螢幕鏡像輸出」並選擇這台電腦。</system:String>
+    <system:String x:Key="DeviceBindingBluetoothBrief">連接藍牙後開啟「輔助觸控」，即可透過電腦控制 iPhone。</system:String>
+    <system:String x:Key="DeviceBindingDeletedFeedback">裝置檔案已刪除</system:String>
+    <system:String x:Key="DeviceBindingUnboundFeedback">綁定已解除</system:String>
+    <system:String x:Key="StopRecordingOnly">停止錄影</system:String>
+    <system:String x:Key="StopStreamingOnly">停止直播</system:String>
+    <system:String x:Key="MediaOutputRecordingAndStreaming">正在錄影及直播</system:String>
 </ResourceDictionary>

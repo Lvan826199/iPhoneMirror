@@ -10,6 +10,9 @@ The existing device connection, binding, mirroring and reverse control must be e
 - OpenAPI 3.1: `http://127.0.0.1:17890/api/v1/openapi.json`.
 - Examples: [Python](python-example.py), [curl / PowerShell](curl-example.md).
 
+This repository exposes an HTTP API and the examples above. It does not currently
+include a standalone stdio MCP server; MCP clients need a separate adapter to call this API.
+
 ## Authentication and permissions
 
 Send `X-API-Key` on every device request. Keys are protected with Windows DPAPI for the current user; regenerating a key stops the host, revokes control and restarts with the new credential. Never put a key in a URL. Device data and errors are not cached by HTTP clients. CORS is not enabled and foreign Origin/Host values are rejected.

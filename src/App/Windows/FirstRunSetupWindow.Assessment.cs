@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -127,21 +127,25 @@ public partial class FirstRunSetupWindow
     private void RenderAssessment(bool preserveRows = false)
     {
         StopAssessmentAnimations(); RefreshAssessmentLabels();
-        PromptPanel.Children.Clear(); _installationPanel = null;
+        PromptPanel.Children.Clear();
         Status.Text = Details.Text = ""; Help.Visibility = DetailsExpander.Visibility = Visibility.Collapsed;
-        Page.Margin = new(16, 4, 16, 4); Page.MaxWidth = 600; Heading.FontSize = 28;
+        Page.Margin = new(16, 4, 16, 4); Page.MaxWidth = 720; Heading.FontSize = 28;
         Scroller.VerticalContentAlignment = VerticalAlignment.Top;
-        PageSymbol.Width = PageSymbol.Height = 40;
-        PageSymbol.Margin = new(0, 0, 0, 16);
+        PageSymbol.Width = PageSymbol.Height = 32;
+        PageSymbol.Margin = new(0, 0, 0, 12);
         PageSymbol.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty,
             _assessing ? "AccentBrush" : _assessmentResults.Any(r => r.NeedsAttention) ? "WarningBrush" : "SuccessBrush");
         Description.Margin = new(12, 10, 12, 12); Description.MinHeight = 32;
         if (!preserveRows || _assessmentItems is null)
         {
             Body.Children.Clear(); _actions.Clear(); _checkRows.Clear();
-            _assessmentItems = new StackPanel { Margin = new(0, 0, 16, 0) };
+            var tools = new System.Windows.Controls.Primitives.UniformGrid { Columns = 2, Margin = new(0, 0, -12, 16) };
+            tools.Children.Add(CreateToolCard(true, () => OpenToolFromSummaryAsync(true)));
+            tools.Children.Add(CreateToolCard(false, () => OpenToolFromSummaryAsync(false)));
+            Body.Children.Add(tools);
+            _assessmentItems = new StackPanel { Margin = new(0, 0, 12, 0) };
             // Reserve the same card and action area throughout the scan, so rows do not move with the heading.
-            var list = new ScrollViewer { Content = _assessmentItems, Height = 360,
+            var list = new ScrollViewer { Content = _assessmentItems, Height = 200,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
             var card = new Border { CornerRadius = new(16), BorderThickness = new(1), Padding = new(20, 4, 20, 4), Child = list };
             card.SetResourceReference(Border.BackgroundProperty, "CardBrush");
@@ -264,8 +268,8 @@ public partial class FirstRunSetupWindow
     private void UpdateAssessmentNavigation()
     {
         Previous.Visibility = Visibility.Hidden; Previous.IsEnabled = false;
-        CancelOperation.Visibility = _assessing ? Visibility.Visible : Visibility.Collapsed;
-        CancelOperation.IsEnabled = _assessmentCancellation?.IsCancellationRequested == false;
+        CancelOperation.Visibility = _assessing || _toolActive ? Visibility.Visible : Visibility.Collapsed;
+        CancelOperation.IsEnabled = _assessmentCancellation?.IsCancellationRequested == false || _toolCancellation?.IsCancellationRequested == false;
         Skip.Visibility = !_assessing && _assessmentResults.Any(r => r.NeedsAttention) ? Visibility.Visible : Visibility.Collapsed;
         Skip.IsEnabled = !_selectingTask; Skip.SetResourceReference(ContentProperty, "SetupDefer");
         Next.IsEnabled = !_assessing && !_selectingTask;
@@ -324,7 +328,7 @@ public partial class FirstRunSetupWindow
         var deviceIndex = _state.Devices.FindIndex(d => task.DeviceId is not null && SetupAssessment.SameDevice(d.Id, task.DeviceId));
         _state.DeviceIndex = Math.Max(0, deviceIndex);
         _state.Step = task.Step;
-        if (_state.CurrentDevice is null && _state.Step is SetupStep.Environment or SetupStep.Bluetooth or SetupStep.Profile or SetupStep.ReDetection)
+        if (_state.CurrentDevice is null && _state.Step is SetupStep.Bluetooth or SetupStep.Profile or SetupStep.ReDetection)
             _state.Step = SetupStep.Connection;
         _state.PreserveKnownDevices = true; _state.Disposition = SetupDisposition.InProgress;
         if (!Save()) { _state = System.Text.Json.JsonSerializer.Deserialize<FirstRunSetupState>(checkpoint)!; return; }

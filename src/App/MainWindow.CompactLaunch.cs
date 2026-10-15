@@ -14,7 +14,7 @@ public partial class MainWindow
     private async Task InitializeDeviceStartupAsync()
     {
         var options = (Application.Current as App)?.LaunchOptions;
-        if (options is not { Enabled: true })
+        if (options is not { Enabled: true } || options.AutomationBackground)
         {
             await _viewModel.RefreshAsync();
             return;

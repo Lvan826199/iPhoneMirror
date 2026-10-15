@@ -84,9 +84,7 @@ internal sealed class DeviceBindingManager
                     null, null, null,
                     new BluetoothDeviceIdentity(stableId, displayName, now), now, now),
             };
-            _profiles.Add(profile.Id, profile);
-            Persist();
-            return new(true, profile);
+            return TryCommitProfile(profile) ? new(true, profile) : new(false, null, SaveFailedMessage);
         }
     }
 
@@ -98,12 +96,18 @@ internal sealed class DeviceBindingManager
         lock (_gate)
         {
             if (!_profiles.TryGetValue(id, out var profile) || string.IsNullOrWhiteSpace(displayName)) return false;
-            _profiles[id] = profile with { DisplayName = displayName.Trim(), UpdatedAt = DateTime.UtcNow }; Persist(); return true;
+            return TryCommitProfile(profile with { DisplayName = displayName.Trim(), UpdatedAt = DateTime.UtcNow });
         }
     }
 
     internal bool DeleteProfile(Guid id)
-    { lock (_gate) { if (!_profiles.Remove(id)) return false; Persist(); return true; } }
+    {
+        lock (_gate)
+        {
+            var updated = new Dictionary<Guid, DeviceBindingProfile>(_profiles);
+            return updated.Remove(id) && TryCommit(updated);
+        }
+    }
 
     internal DeviceBindingProfile? FindByIdentity(DeviceIdentityType type, string stableId)
     {
@@ -152,7 +156,7 @@ internal sealed class DeviceBindingManager
                 DeviceIdentityType.AirPlay => profile with { AirPlayIdentity = new(stableId, deviceName, fingerprint, now), DeviceFingerprint = profile.DeviceFingerprint ?? fingerprint, UpdatedAt = now },
                 _ => profile with { BluetoothIdentity = new(stableId, deviceName, now), UpdatedAt = now }
             };
-            _profiles[profileId] = updated; Persist(); return new(true, compatibility);
+            return TryCommitProfile(updated) ? new(true, compatibility) : new(false, compatibility, SaveFailedMessage);
         }
     }
 
@@ -161,13 +165,13 @@ internal sealed class DeviceBindingManager
         lock (_gate)
         {
             if (!_profiles.TryGetValue(profileId, out var profile)) return false;
-            _profiles[profileId] = type switch
+            var updated = type switch
             {
                 DeviceIdentityType.Wired => profile with { WiredIdentity = null, UpdatedAt = DateTime.UtcNow },
                 DeviceIdentityType.AirPlay => profile with { AirPlayIdentity = null, UpdatedAt = DateTime.UtcNow },
                 _ => profile with { BluetoothIdentity = null, UpdatedAt = DateTime.UtcNow }
             };
-            Persist(); return true;
+            return TryCommitProfile(updated);
         }
     }
 
@@ -179,12 +183,17 @@ internal sealed class DeviceBindingManager
 
     internal int ClearBluetoothBindings()
     {
-        Guid[] profileIds;
         lock (_gate)
-            profileIds = _profiles.Values.Where(profile => profile.BluetoothIdentity is not null)
-                .Select(profile => profile.Id).ToArray();
-        foreach (var profileId in profileIds) Unbind(profileId, DeviceIdentityType.Bluetooth);
-        return profileIds.Length;
+        {
+            var updated = new Dictionary<Guid, DeviceBindingProfile>(_profiles);
+            var count = 0;
+            foreach (var profile in _profiles.Values.Where(profile => profile.BluetoothIdentity is not null))
+            {
+                updated[profile.Id] = profile with { BluetoothIdentity = null, UpdatedAt = DateTime.UtcNow };
+                count++;
+            }
+            return count != 0 && TryCommit(updated) ? count : 0;
+        }
     }
 
     private static bool Matches(DeviceBindingProfile profile, DeviceIdentityType type, string id) => type switch
@@ -249,12 +258,31 @@ internal sealed class DeviceBindingManager
                 }
                 _profiles[profile.Id] = profile;
             }
-            if (removedEmptyProfiles && !_readOnly) Persist();
+            if (removedEmptyProfiles && !_readOnly && !TryPersist(_profiles.Values))
+                LoadError = new IOException(SaveFailedMessage);
         }
         catch (Exception error) { LoadError = error; DiagnosticLogger.Exception("binding", "profile_load_failed", error); }
     }
 
-    private void Persist()
+    private static string SaveFailedMessage => LocalizationService.GetOrDefault(
+        "DeviceBindingSaveFailed", "Device bindings could not be saved. Please try again.");
+
+    // Callers hold _gate. Publish the new snapshot only after storage commits.
+    private bool TryCommitProfile(DeviceBindingProfile profile)
+    {
+        var updated = new Dictionary<Guid, DeviceBindingProfile>(_profiles) { [profile.Id] = profile };
+        return TryCommit(updated);
+    }
+
+    private bool TryCommit(Dictionary<Guid, DeviceBindingProfile> updated)
+    {
+        if (_readOnly || !TryPersist(updated.Values)) return false;
+        _profiles.Clear();
+        foreach (var profile in updated.Values) _profiles.Add(profile.Id, profile);
+        return true;
+    }
+
+    private bool TryPersist(IEnumerable<DeviceBindingProfile> profiles)
     {
         try
         {
@@ -262,7 +290,7 @@ internal sealed class DeviceBindingManager
             var temporaryPath = $"{_path}.{Guid.NewGuid():N}.tmp";
             try
             {
-                File.WriteAllText(temporaryPath, JsonSerializer.Serialize(_profiles.Values,
+                File.WriteAllText(temporaryPath, JsonSerializer.Serialize(profiles,
                     new JsonSerializerOptions { WriteIndented = true }));
                 File.Move(temporaryPath, _path, true);
             }
@@ -270,8 +298,13 @@ internal sealed class DeviceBindingManager
             {
                 if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
             }
+            return true;
         }
-        catch (Exception error) { DiagnosticLogger.Exception("binding", "profile_save_failed", error); }
+        catch (Exception error)
+        {
+            DiagnosticLogger.Exception("binding", "profile_save_failed", error);
+            return false;
+        }
     }
 
     private static string NormalizeDisplayName(string displayName) =>

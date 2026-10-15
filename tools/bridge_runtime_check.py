@@ -6,6 +6,7 @@ import ssl
 import struct
 import asyncio
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 import httpx
@@ -101,4 +102,33 @@ def check_runtime_functionality(build_touchscreen_report, contact, release, buil
                 raise RuntimeError('DDI HTTP client closed unexpectedly')
     asyncio.run(check_ddi_http_transport())
     checks.append('ddi_async_http_transport')
+    async def check_cryptex_owned_channels():
+        from ddi_support import _CryptexRsd
+        from pymobiledevice3.services.cryptexd import CryptexdService
+        from pymobiledevice3.remote.remotexpc import RemoteXPCConnection
+
+        class Writer:
+            closed = False
+            def close(self): self.closed = True
+            async def wait_closed(self): pass
+
+        writer = Writer()
+        async def open_connection(*_): return object(), writer
+        async def handshake(): pass
+        async def response(_): return {'error': 0, 'argv': {}}
+        connection = RemoteXPCConnection(('offline', 1), open_connection=open_connection)
+        connection._do_handshake = handshake
+        connection.send_receive_request = response
+        rsd = SimpleNamespace(start_remote_service=lambda _: connection)
+        owner = _CryptexRsd(rsd)
+        try:
+            if await CryptexdService(owner).copy_installed() != []:
+                raise RuntimeError('Cryptex inventory parsing failed')
+        finally:
+            await owner.close()
+        if not writer.closed or connection._writer is not None:
+            raise RuntimeError('Cryptex channel ownership failed')
+
+    asyncio.run(check_cryptex_owned_channels())
+    checks.append('cryptex_owned_channels')
     return checks

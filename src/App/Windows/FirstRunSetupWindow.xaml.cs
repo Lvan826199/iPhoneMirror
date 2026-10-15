@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -18,28 +18,25 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
     private readonly FirstRunSetupStore _store;
     private FirstRunSetupState _state;
     private CancellationTokenSource? _operation;
-    private bool _busy, _verified, _allowClose, _closed, _installNeeded;
+    private bool _busy, _verified, _allowClose, _closed;
     private bool _advancing, _acceptFinalDiscovery;
     private bool _skipRequested;
     private bool _advanceCancelled;
-    private TaskCompletionSource<string?>? _choice;
     private readonly List<Button> _actions = [];
-    private StackPanel? _installationPanel;
     private readonly bool _previewOnly;
     private readonly CancellationTokenSource _lifetime = new();
     internal bool StartRequested { get; private set; }
     internal FirstRunSetupState State => _state;
 
-    internal FirstRunSetupWindow(MainViewModel main, FirstRunSetupStore? store = null, bool rerun = false, bool previewOnly = false, bool checkOnOpen = true)
+    internal FirstRunSetupWindow(MainViewModel main, FirstRunSetupStore? store = null, bool rerun = false, bool previewOnly = false)
     {
         _previewOnly = previewOnly;
         _main = main; _store = store ?? new(); _state = _store.Load();
         CheckRuntime = new() { WiredIdentitiesAsync = async token => (await _main.SetupScanAsync(false, token)).Select(d => d.Udid).ToArray() };
-        _main.SetupActive = true;
         ApplyWirelessPreferences = _main.SetupApplyWirelessPreferencesAsync;
-        if (!checkOnOpen && rerun && _state.Disposition == SetupDisposition.Completed)
+        if (rerun && _state.Disposition == SetupDisposition.Completed)
             _state = new() { PreferencesApplied = true };
-        else if (!checkOnOpen && _state.Disposition == SetupDisposition.InProgress)
+        else if (_state.Disposition == SetupDisposition.InProgress)
         {
             if (_state.WirelessBackendDraft is { } backend && _main.WirelessReceiverBackends.FirstOrDefault(v => v.Backend == backend) is { } backendOption)
                 _main.SelectedWirelessReceiverBackend = backendOption;
@@ -47,19 +44,18 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
                 _main.SelectedWirelessDisplayProfile = profileOption;
         }
         InitializeComponent();
+        _main.SetupActive = true;
         Loaded += (_, _) =>
         {
-            // Remember the first display even if the user leaves setup unfinished.
-            // Saved progress remains available through the manual setup entries.
-            if (!_previewOnly && _state.Disposition == SetupDisposition.New)
-            {
-                _state.Disposition = SetupDisposition.InProgress;
-                if (!Save()) return;
-            }
-            if (checkOnOpen && !_previewOnly) _ = CheckSettingsAsync(); else Enter();
+            // Show a usable page even when remembering first-run progress fails.
+            // Opening setup resumes its pages directly; no configuration audit runs here.
+            var rememberFirstDisplay = !_previewOnly && _state.Disposition == SetupDisposition.New;
+            if (rememberFirstDisplay) _state.Disposition = SetupDisposition.InProgress;
+            Enter();
+            if (rememberFirstDisplay) Save();
         };
         Closing += OnClosing;
-        Closed += (_, _) => { _closed = true; StopDiscovery(); _lifetime.Cancel(); _operation?.Cancel(); _choice?.TrySetCanceled(); StopAssessmentAnimations(); ReleaseSetupOwnership(); };
+        Closed += (_, _) => { _closed = true; StopDiscovery(); _lifetime.Cancel(); _operation?.Cancel(); StopAssessmentAnimations(); ReleaseSetupOwnership(); };
         LocalizationService.RefreshWhenLanguageChanges(this, () =>
         {
             if (_assessmentVisible) { if (_assessing) RefreshAssessmentLabels(); else RenderAssessment(); return; }
@@ -89,11 +85,11 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
     private void Enter(int direction = 1)
     {
         StopDiscovery();
-        _verified = false; _installNeeded = false;
+        _verified = false;
         Render(); Scroller.ScrollToTop();
         AnimatePage(direction);
         if (!_previewOnly && _state.Step is (SetupStep.Connection or SetupStep.Devices)) StartDiscovery();
-        if (!_previewOnly && _state.Step is (SetupStep.Environment or SetupStep.ReDetection or SetupStep.Profile or SetupStep.Validation))
+        if (!_previewOnly && _state.Step is (SetupStep.ReDetection or SetupStep.Validation))
             _ = RunAsync(false);
     }
     private void RefreshLabels()
@@ -129,7 +125,7 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
         PageSymbol.Width = PageSymbol.Height = 30; PageSymbol.Margin = new(0, 0, 0, 10);
         PageSymbol.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "MutedTextBrush");
         Description.Margin = new(0, 10, 0, 20); Description.MinHeight = 0; PromptPanel.Visibility = Visibility.Visible;
-        RefreshLabels(); Body.Children.Clear(); PromptPanel.Children.Clear(); _actions.Clear(); _installationPanel = null;
+        RefreshLabels(); Body.Children.Clear(); PromptPanel.Children.Clear(); _actions.Clear();
         Status.Text = Details.Text = ""; Help.Visibility = Visibility.Collapsed;
         switch (_state.Step)
         {
@@ -154,10 +150,10 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
                 _verified = _previewOnly && _state.Devices.Count > 0;
                 break;
             case SetupStep.Environment:
-                _installationPanel = new StackPanel(); Body.Children.Add(_installationPanel);
-                _installationPanel.Children.Add(Text("SetupInstallConsent"));
-                Action("SetupInstall", () => RunAsync(true), _installationPanel);
-                Action("SetupRetry", () => RunAsync(false)); break;
+            case SetupStep.Profile:
+            case SetupStep.Wireless:
+            case SetupStep.Bluetooth:
+                RenderToolHandoff(_state.Step == SetupStep.Environment); break;
             case SetupStep.WiredControl:
                 Body.Children.Add(Text("SetupCheckBridgeRepair"));
                 Action("SetupRetry", () => AdvancePendingTasksAsync());
@@ -166,12 +162,6 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
                 Body.Children.Add(Text("SetupCheckControlHint"));
                 Action("SetupRetry", () => AdvancePendingTasksAsync());
                 break;
-            case SetupStep.Wireless:
-            case SetupStep.Bluetooth:
-                if (_state.Optional) Body.Children.Add(Text("SetupSkipHint" + _state.Step));
-                _verified = HasSavedBinding();
-                if (_verified) Status.Text = L("SetupBindingSaved");
-                Action(_verified ? "SetupConfigureAgain" : "SetupConfigure", () => RunAsync(false)); break;
             case SetupStep.Display: DisplaySettings(); break;
             case SetupStep.WirelessBackend:
             case SetupStep.WirelessDisplay:
@@ -187,7 +177,7 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
                 if (_state.Step == SetupStep.Completed && _state.HasSavedDevices) Action("SetupLaterMain", () => FinishAsync(false));
                 break;
         }
-        if (_state.Step is SetupStep.ReDetection or SetupStep.Profile or SetupStep.Validation)
+        if (_state.Step is SetupStep.ReDetection or SetupStep.Validation)
             Action("SetupRetry", () => RunAsync(false));
         if (_smartSetup && _activeTask?.Checks.FirstOrDefault(c => c.NeedsAttention) is { } check)
         {
@@ -238,11 +228,10 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
         BusyBar.Visibility = _busy ? Visibility.Visible : Visibility.Collapsed;
         AnimateActivity();
         // Once a task starts, use this space for its inline device prompt.
-        Body.Visibility = _busy ? Visibility.Collapsed : Visibility.Visible;
+        Body.Visibility = _busy && !_toolActive ? Visibility.Collapsed : Visibility.Visible;
         Body.IsEnabled = !_refreshingTask && !_selectingTask;
         DetailsExpander.Visibility = string.IsNullOrWhiteSpace(Details.Text) ? Visibility.Collapsed : Visibility.Visible;
         Status.Visibility = string.IsNullOrWhiteSpace(Status.Text) ? Visibility.Collapsed : Visibility.Visible;
-        if (_installationPanel is not null) _installationPanel.Visibility = _installNeeded ? Visibility.Visible : Visibility.Collapsed;
         foreach (var action in _actions) action.IsEnabled = !_busy && !_advancing &&
             (_state.Step is not (SetupStep.Connection or SetupStep.Devices) || _discovery is null || _discovery.IsCancellationRequested);
         if (_refreshingTask || _selectingTask)
@@ -298,7 +287,8 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
             {
                 _state.WirelessEnabled ??= true; _state.BluetoothEnabled ??= true; _state.UsbControlEnabled ??= true;
             }
-            if (_state.IsChoiceStep || _state.Step is SetupStep.Connection or SetupStep.Devices) _state.Record(SetupOutcome.Verified);
+            if (_state.IsChoiceStep || _state.Step is SetupStep.Connection or SetupStep.Devices || IsToolStep(_state.Step) && _verified)
+                _state.Record(SetupOutcome.Verified);
             Navigate();
         }
         catch (Exception error) { if (!_closed) Failure(error); }
@@ -356,7 +346,7 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
     }
     private void CancelOperationClick(object sender, RoutedEventArgs e)
     {
-        if (_assessmentVisible || _refreshingTask) { _assessmentCancellation?.Cancel(); return; }
+        if (_assessmentVisible || _refreshingTask) { _assessmentCancellation?.Cancel(); _toolCancellation?.Cancel(); return; }
         if (_busy) _operation?.Cancel();
         else { _advanceCancelled = _advancing; _verified = false; StopDiscovery(); }
         Status.Text = L(_busy ? "SetupCancelling" : "SetupCancelled");
@@ -393,18 +383,11 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
     }
     private Task RunAsync(bool install) => RunOperationAsync(async token =>
     {
-        if (install) _installNeeded = false;
         switch (_state.Step)
         {
             case SetupStep.Environment:
-                var result = await PrepareDevice(Target, install,
-                    new Progress<SetupDriverProgress>(p =>
-                    { if (_closed || token.IsCancellationRequested || !_busy || _state.Step != SetupStep.Environment) return; Status.Text = L("SetupDriver" + p.Stage); Details.Text += Status.Text + "\n"; if (p.Detail is not null) Details.Text += p.Detail + "\n"; DetailsExpander.Visibility = Visibility.Visible; }), token);
-                if (!result.Success && result.Stage == "Result" && !install)
-                { _installNeeded = true; throw new InvalidOperationException(L("SetupInstallConsent")); }
-                if (!result.Success && result.Stage != "Replug") throw new InvalidOperationException(L("SetupDriver" + result.Stage));
-                _installNeeded = false;
-                if (result.Stage == "Replug") Status.Text = L("SetupDriverReplug");
+                await OpenStandaloneToolAsync(true, token);
+                await VerifyStandaloneToolAsync(true, token);
                 break;
             case SetupStep.ReDetection:
                 await PollAsync(async () => (await _main.SetupScanAsync(false, token)).Any(d =>
@@ -414,21 +397,11 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
                 _state.CurrentDevice!.Id = identified.Udid; _state.CurrentDevice.Name = identified.DisplayName;
                 RefreshLabels(); break;
             case SetupStep.Profile:
-                var device = (await _main.SetupScanAsync(false, token)).SingleOrDefault(d => DeviceViewModel.UdidEquals(d.Udid, Target))
-                    ?? throw new InvalidOperationException(L("SetupDeviceLost"));
-                var bindings = DeviceBindingManager.Shared;
-                bindings.RefreshFromDisk();
-                var profile = bindings.FindByIdentity(DeviceIdentityType.Wired, Target);
-                if (profile is null)
-                {
-                    var created = bindings.CreateProfileFromIdentity(device.DisplayName, DeviceIdentityType.Wired, Target,
-                        new(device.ProductType, device.ModelDisplay, SystemVersion: device.OsVersion));
-                    if (!created.Success) throw new InvalidOperationException(created.Error);
-                }
-                if (new DeviceBindingManager().FindByIdentity(DeviceIdentityType.Wired, Target) is null) throw new IOException(L("SetupSaveFailed"));
-                _main.SetupSelect(Target); break;
-            case SetupStep.Wireless: await ConfigureWirelessAsync(token); break;
-            case SetupStep.Bluetooth: await ConfigureBluetoothAsync(token); break;
+            case SetupStep.Wireless:
+            case SetupStep.Bluetooth:
+                await OpenStandaloneToolAsync(false, token);
+                await VerifyStandaloneToolAsync(false, token);
+                break;
             case SetupStep.Validation:
                 if (!_main.SetupSaveVideoPreferences(_state.Devices.Select(d => d.Id))) throw new IOException(L("SetupSaveFailed"));
                 if (_state.UsesWirelessMirroring) _state.WirelessRestarted |= await ApplyWirelessPreferences(token);
@@ -445,8 +418,9 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
         if (_busy || _closed) return;
         _busy = true; _verified = false; Help.Visibility = Visibility.Collapsed; Details.Text = "";
         _state.Outcomes.Remove(_state.Step);
+        var checkpoint = System.Text.Json.JsonSerializer.Serialize(_state);
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token); _operation = cancellation;
-        cancellation.CancelAfter(TimeSpan.FromMinutes(12));
+        if (!IsToolStep(_state.Step)) cancellation.CancelAfter(TimeSpan.FromMinutes(12));
         Status.Text = L("SetupWorking"); UpdateNavigation();
         try
         {
@@ -455,8 +429,10 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
             cancellation.Token.ThrowIfCancellationRequested();
             if (!_closed) { _verified = true; if (!Status.Text.Contains(L("SetupDriverReplug"), StringComparison.Ordinal)) Status.Text = L("SetupVerified"); }
         }
-        catch (OperationCanceledException) { if (!_closed) Status.Text = L("SetupCancelled"); }
-        catch (Exception error) { cancellation.Cancel(); if (!_closed) Failure(error); }
+        catch (OperationCanceledException)
+        { _state = System.Text.Json.JsonSerializer.Deserialize<FirstRunSetupState>(checkpoint)!; if (!_closed) Status.Text = L("SetupCancelled"); }
+        catch (Exception error)
+        { _state = System.Text.Json.JsonSerializer.Deserialize<FirstRunSetupState>(checkpoint)!; cancellation.Cancel(); if (!_closed) Failure(error); }
         finally
         {
             _busy = false; _operation = null;
@@ -496,90 +472,10 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
         }
         throw new TimeoutException(L("SetupTimeout"));
     }
-    private async Task ConfigureWirelessAsync(CancellationToken token)
-    {
-        await EnsureReceiverComponentAsync(token);
-        if (!await _main.SetupReceiverAsync(token)) throw new InvalidOperationException(L("SetupAirPlayFailed"));
-        IReadOnlyList<DeviceViewModel> devices = [];
-        await PollAsync(async () => { devices = await _main.SetupScanAsync(true, token); return devices.Any(d => d.Ready); }, token);
-        if (_state.Usage == SetupUsage.WirelessOnly)
-        {
-            foreach (var wireless in devices.Where(d => d.Ready))
-            {
-                token.ThrowIfCancellationRequested();
-                var manager = DeviceBindingManager.Shared;
-                manager.RefreshFromDisk();
-                if (manager.FindByIdentity(DeviceIdentityType.AirPlay, wireless.Udid) is null)
-                {
-                    var created = manager.CreateProfileFromIdentity(wireless.DisplayName, DeviceIdentityType.AirPlay, wireless.Udid,
-                        new(wireless.ProductType, wireless.ModelDisplay));
-                    if (!created.Success) throw new InvalidOperationException(created.Error);
-                }
-                if (new DeviceBindingManager().FindByIdentity(DeviceIdentityType.AirPlay, wireless.Udid) is null) throw new IOException(L("SetupSaveFailed"));
-                if (!_state.Devices.Any(d => d.Id == wireless.Udid)) _state.Devices.Add(new() { Id = wireless.Udid, Name = wireless.DisplayName });
-                Details.Text += wireless.DisplayName + " · " + L("SetupVerified") + "\n";
-            }
-            return;
-        }
-        var id = await ChooseAsync(devices.Where(d => d.Ready).Select(d => (d.Udid, d.DisplayName)).ToArray(), token);
-        devices = await _main.SetupScanAsync(true, token);
-        var device = devices.FirstOrDefault(d => DeviceViewModel.UdidEquals(d.Udid, id) && d.Ready)
-            ?? throw new InvalidOperationException(L("SetupDeviceLost"));
-        var bindings = DeviceBindingManager.Shared;
-        bindings.RefreshFromDisk();
-        var profile = bindings.FindByIdentity(DeviceIdentityType.Wired, Target) ?? throw new InvalidOperationException(L("SetupDeviceLost"));
-        var bound = bindings.Bind(profile.Id, DeviceIdentityType.AirPlay, id, device.DisplayName,
-            new(device.ProductType, device.ModelDisplay), userConfirmed: true);
-        if (!bound.Success) throw new InvalidOperationException(bound.Error);
-        if (new DeviceBindingManager().FindByIdentity(DeviceIdentityType.AirPlay, id) is null) throw new IOException(L("SetupSaveFailed"));
-    }
-    private async Task<string> ChooseAsync((string Id, string Name)[] choices, CancellationToken token)
-    {
-        _choice = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        PromptPanel.Children.Clear(); PromptPanel.Children.Add(Text("SetupConfirmIdentity"));
-        var options = new List<UIElement>();
-        foreach (var item in choices)
-        {
-            var card = ValueCard("identity", item.Name, null, false);
-            card.Tag = Symbol("phone");
-            card.Checked += (_, _) => _choice?.TrySetResult(item.Id); options.Add(card);
-        }
-        PromptPanel.Children.Add(Paginate(options, 3));
-        try { return await _choice.Task.WaitAsync(TimeSpan.FromMinutes(2), token) ?? throw new OperationCanceledException(); }
-        finally { _choice = null; PromptPanel.Children.Clear(); }
-    }
-    private async Task ConfigureBluetoothAsync(CancellationToken token)
-    {
-        var id = Target; _main.SetupSelect(id);
-        try
-        {
-            // Own startup until completion so cancellation cannot leave advertising behind.
-            var started = await _main.StartBluetoothPeripheralForConfigurationAsync(id);
-            token.ThrowIfCancellationRequested();
-            if (!started)
-                throw new InvalidOperationException(L("SetupBluetoothFailed"));
-            var savedId = DeviceBindingManager.Shared.FindByIdentity(DeviceIdentityType.Wired, id)?.BluetoothIdentity?.StableId;
-            IReadOnlyList<BluetoothClientInfo> clients = [];
-            await PollAsync(async () => { clients = await _main.GetReverseBluetoothClientsAsync(); return clients.Any(c => c.CanBind || c.Id == savedId); }, token);
-            var chosen = clients.Any(c => c.Id == savedId) ? savedId! :
-                await ChooseAsync(clients.Where(c => c.CanBind).Select(c => (c.Id, c.DisplayName)).ToArray(), token);
-            clients = await _main.GetReverseBluetoothClientsAsync();
-            token.ThrowIfCancellationRequested();
-            var client = clients.FirstOrDefault(c => c.Id == chosen && (c.CanBind || c.Id == savedId));
-            if (client is null)
-                throw new InvalidOperationException(L("SetupBluetoothFailed"));
-            var manager = DeviceBindingManager.Shared;
-            manager.RefreshFromDisk();
-            var profile = manager.FindByIdentity(DeviceIdentityType.Wired, id) ?? throw new IOException(L("SetupSaveFailed"));
-            var result = manager.Bind(profile.Id, DeviceIdentityType.Bluetooth, chosen, client.DisplayName, null, userConfirmed: true);
-            if (!result.Success) throw new IOException(result.Error);
-            if (new DeviceBindingManager().FindByIdentity(DeviceIdentityType.Bluetooth, chosen) is null) throw new IOException(L("SetupSaveFailed"));
-        }
-        finally { await _main.StopBluetoothPeripheralConfigurationAsync(); }
-    }
     private void Failure(Exception error)
     {
-        Status.Text = _installNeeded ? L("SetupInstallConsent") : L("SetupFailed");
+        Status.Text = error.Message == L("SetupToolsIncomplete") || error.Message == L("SetupDriverReplug")
+            ? error.Message : L("SetupFailed");
         Status.Visibility = Visibility.Visible;
         Details.Text += error.Message + "\n";
         DetailsExpander.Visibility = Visibility.Visible;

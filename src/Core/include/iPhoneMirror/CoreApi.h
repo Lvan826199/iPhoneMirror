@@ -447,6 +447,8 @@ IM_API std::int32_t IM_CALL im_session_force_preview_refresh(
 IM_API std::int32_t IM_CALL im_session_set_window_corner_profile(
     iPhoneMirror::SessionHandle handle, void* hwnd, float normalized_radius,
     float curve_exponent);
+// Clockwise quarter turns, normalized modulo four. Rotates only this preview;
+// source capture geometry and the USB/AirPlay stream remain unchanged.
 IM_API std::int32_t IM_CALL im_session_set_window_rotation(
     iPhoneMirror::SessionHandle handle, void* hwnd, std::int32_t quarter_turns);
 // Local composition preview only; 0.1 = most transparent, 1 = opaque.

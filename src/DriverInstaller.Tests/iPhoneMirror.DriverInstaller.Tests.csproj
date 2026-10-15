@@ -26,6 +26,7 @@
     <Compile Include="..\DriverInstaller\Services\DriverLocalization.cs" Link="DriverLocalization.cs" />
     <Compile Include="..\DriverInstaller\Services\DeviceCatalog.cs" Link="DeviceCatalog.cs" />
     <Compile Include="..\DriverInstaller\Services\AppleDeviceMetadataReader.cs" Link="AppleDeviceMetadataReader.cs" />
+    <Compile Include="..\DriverInstaller\Services\AppleMuxSupportProbe.cs" Link="AppleMuxSupportProbe.cs" />
     <Compile Include="..\DriverInstaller\Services\AppleProductNames.cs" Link="AppleProductNames.cs" />
     <Compile Include="..\DriverInstaller\Services\AppleSoftwareUpdateCatalog.cs" Link="AppleSoftwareUpdateCatalog.cs" />
     <Compile Include="..\DriverInstaller\Services\AppleSupportInstaller.cs" Link="AppleSupportInstaller.cs" />

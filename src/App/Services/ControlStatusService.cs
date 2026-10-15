@@ -24,6 +24,7 @@ internal enum ControlStage
     Stopping,
     Failed,
     Cancelled,
+    WaitingForDeveloperMode,
 }
 
 internal static class ControlStageWorkflow
@@ -326,6 +327,30 @@ internal sealed class ControlStatusService
             ("description", description));
         if (mode == ControlStatusMode.Usb)
             DiagnosticLogger.ReverseControl("usb", "wired_control_connected");
+        StatusChanged?.Invoke(this, snapshot);
+    }
+
+    internal void WaitForDeveloperMode(string deviceName, string description)
+    {
+        ControlStatusSnapshot snapshot;
+        lock (_gate)
+        {
+            _promptCompletion?.TrySetResult(new(ControlPromptAction.Cancel));
+            _promptCompletion = null;
+            foreach (var (stage, timer) in _timers)
+            {
+                timer.Stop();
+                _durations[stage] = timer.Elapsed;
+                if (_progress.GetValueOrDefault(stage) == ControlStageProgress.Active)
+                    _progress[stage] = ControlStageProgress.Pending;
+            }
+            AddDiagnosticUnsafe(description, "developer_mode_revealed");
+            // This startup attempt has ended and released its USB resources.
+            // Retry starts a fresh attempt after the phone has restarted.
+            snapshot = new(ControlStatusMode.Usb, ControlStage.WaitingForDeveloperMode,
+                deviceName, description, false, true, null, null);
+            _current = snapshot;
+        }
         StatusChanged?.Invoke(this, snapshot);
     }
 

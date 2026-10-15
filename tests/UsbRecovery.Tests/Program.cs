@@ -31,6 +31,9 @@ var host=Activator.CreateInstance(hostType, true)!;
 var onEvent=hostType.GetMethod("OnBridgeEvent",flags)!;
 string State() => hostType.GetProperty("State",flags)!.GetValue(host)!.ToString()!;
 onEvent.Invoke(host,[new BridgeEvent("status","recovery_triggered",null)]);
+Assert(State()=="Idle","stopped host ignores late events");
+hostType.GetField("_started",flags)!.SetValue(host,1);
+onEvent.Invoke(host,[new BridgeEvent("status","recovery_triggered",null)]);
 Assert(State()=="Recovering","host tracks recovery");
 onEvent.Invoke(host,[new BridgeEvent("ready",null,null)]);
 Assert(State()=="Ready","host sender accepts replacement ready");
@@ -45,6 +48,14 @@ typeof(DirectUsbInputBridge).GetField("_stdin",flags)!.SetValue(queuedBridge,new
 var writerGate=(SemaphoreSlim)typeof(DirectUsbInputBridge).GetField("_sendLock",flags)!.GetValue(queuedBridge)!;
 var vmType=typeof(DirectUsbInputBridge).Assembly.GetType("IPhoneMirror.App.ViewModels.MainViewModel")!;
 var vm=System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(vmType);
+// The isolated sender fixture still needs its real ownership registry and a
+// separate binding snapshot. Do not read or write the user's saved bindings.
+var bindingsType=typeof(DirectUsbInputBridge).Assembly.GetType("IPhoneMirror.App.Services.DeviceBindingManager")!;
+var bindings=Activator.CreateInstance(bindingsType,BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic,
+    null,[Path.Combine(Path.GetTempPath(),Guid.NewGuid()+".json"),true],null)!;
+vmType.GetField("_reverseBindings",flags)!.SetValue(vm,bindings);
+var ownershipType=typeof(DirectUsbInputBridge).Assembly.GetType("IPhoneMirror.App.Services.Automation.AutomationOwnership")!;
+vmType.GetField("<AutomationOwnership>k__BackingField",flags)!.SetValue(vm,Activator.CreateInstance(ownershipType,true));
 var controlType=typeof(DirectUsbInputBridge).Assembly.GetType("IPhoneMirror.App.Services.DeviceControlSession")!;
 var control=Activator.CreateInstance(controlType,BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic,null,["device-test"],null)!;
 foreach(var (name,value) in new (string,object)[]{("WiredEnabled",true),("WiredConnected",true),("WiredTarget","device-test"),("WiredBridge",host)})

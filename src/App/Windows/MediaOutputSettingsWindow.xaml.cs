@@ -65,7 +65,7 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
         UpdateStartButtons();
         await RefreshMicrophonesAsync();
         if (_microphoneCancellation.IsCancellationRequested) return;
-        if (!_viewModel.IsMediaOutputRunning &&
+        if (!_viewModel.IsRecordingMediaOutput &&
             _viewModel.PendingRecordingPath is not null)
             await PromptToSaveRecordingAsync();
     }
@@ -83,6 +83,8 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
     {
         if (e.PropertyName is nameof(MainViewModel.CanStartMediaOutput) or
             nameof(MainViewModel.CanRecordMediaOutput) or
+            nameof(MainViewModel.CanStartRecording) or
+            nameof(MainViewModel.CanStartStreaming) or
             nameof(MainViewModel.CanStreamRtmp) or
             nameof(MainViewModel.CanStreamSrt) or
             nameof(MainViewModel.CanStreamWhip) or
@@ -94,8 +96,8 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
         if (e.PropertyName == nameof(MainViewModel.SourceVideoHeight) &&
             !_viewModel.IsMediaOutputRunning)
             ApplyPreviewOutputDefaults(force: false);
-        if (e.PropertyName == nameof(MainViewModel.IsMediaOutputRunning) &&
-            !_viewModel.IsMediaOutputRunning &&
+        if (e.PropertyName == nameof(MainViewModel.IsRecordingMediaOutput) &&
+            !_viewModel.IsRecordingMediaOutput &&
             _viewModel.PendingRecordingPath is not null)
             _ = Dispatcher.BeginInvoke(async () =>
                 await PromptToSaveRecordingAsync());
@@ -183,9 +185,9 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
             StartStreamingButton.IsEnabled = false;
             return;
         }
-        StartRecordingButton.IsEnabled = _viewModel.CanStartMediaOutput &&
+        StartRecordingButton.IsEnabled = _viewModel.CanStartRecording &&
             _viewModel.CanRecordMediaOutput;
-        StartStreamingButton.IsEnabled = _viewModel.CanStartMediaOutput &&
+        StartStreamingButton.IsEnabled = _viewModel.CanStartStreaming &&
             SelectedProtocolSupported();
     }
 
@@ -311,11 +313,20 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
             discarded ? StatusTone.Success : StatusTone.Error);
     }
 
+    private async void OnStopRecordingClick(object sender, RoutedEventArgs e)
+    {
+        await RunAsync(() => _viewModel.StopRecordingAsync());
+        await PromptToSaveRecordingAsync();
+    }
+
+    private async void OnStopStreamingClick(object sender, RoutedEventArgs e) =>
+        await RunAsync(() => _viewModel.StopStreamingAsync());
+
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 
     private async Task PromptToSaveRecordingAsync()
     {
-        if (_savePromptOpen || _viewModel.IsMediaOutputRunning) return;
+        if (_savePromptOpen || _viewModel.IsRecordingMediaOutput) return;
         var pending = _viewModel.PendingRecordingPath;
         if (pending is null) return;
         _savePromptOpen = true;
@@ -347,15 +358,7 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
                 try { File.Move(pending, dialog.FileName, overwrite: true); }
                 catch (IOException)
                 {
-                    await using var source = new FileStream(pending, FileMode.Open,
-                        FileAccess.Read, FileShare.Read, 1024 * 1024,
-                        FileOptions.Asynchronous | FileOptions.SequentialScan);
-                    await using var destination = new FileStream(dialog.FileName,
-                        FileMode.Create, FileAccess.Write, FileShare.None,
-                        1024 * 1024, FileOptions.Asynchronous);
-                    await source.CopyToAsync(destination);
-                    await destination.FlushAsync();
-                    File.Delete(pending);
+                    await PendingRecordingStore.CopyAndDeleteAsync(pending, dialog.FileName);
                 }
                 _viewModel.MarkPendingRecordingSaved(pending);
                 SetFeedback(LocalizationService.Format(

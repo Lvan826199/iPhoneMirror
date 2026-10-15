@@ -655,6 +655,12 @@ try {
                 (Get-Command dotnet -ErrorAction Stop).Source @($testAssembly.Trim()) `
                 -CleanManagedTestEnvironment
             if ($testExitCode -ne 0) { throw "Tests failed: $Project ($testExitCode)" }
+            if ($Project -eq 'src/App.Runtime.Tests/IPhoneMirror.App.Runtime.Tests.csproj') {
+                $lifecycleExitCode = Invoke-NativeToolWithSanitizedEnvironment `
+                    (Get-Command dotnet -ErrorAction Stop).Source @($testAssembly.Trim(), '--automation-lifecycle') `
+                    -CleanManagedTestEnvironment
+                if ($lifecycleExitCode -ne 0) { throw "Automation lifecycle tests failed: $lifecycleExitCode" }
+            }
         }
         & (Join-Path $Root 'scripts\test_vc_runtime_version.ps1') | Out-Host
         if ($LASTEXITCODE -ne 0) {

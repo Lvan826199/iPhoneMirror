@@ -13,6 +13,7 @@ public partial class App : Application
     internal bool IsSystemSessionEnding { get; private set; }
     internal bool IsUiPreviewMode { get; set; }
     internal CompactLaunchOptions LaunchOptions { get; private set; } = new(false, null);
+    internal bool AutomationBackground { get; set; }
     private readonly UpdateSettingsStore _settingsStore = new();
     private readonly GitHubReleaseClient _releaseClient = new();
     private AboutWindow? _aboutWindow;
@@ -63,6 +64,7 @@ public partial class App : Application
                 ("arguments", e.Args.Length));
             LocalizationService.Initialize();
             LaunchOptions = CompactLaunchOptions.Parse(e.Args);
+            AutomationBackground = LaunchOptions.AutomationBackground;
             AppIdentity.Initialize();
             UpdateSettings = _settingsStore.Load();
             ThemeService.Apply(UpdateSettings.Theme);
@@ -108,7 +110,10 @@ public partial class App : Application
                 Dispatcher.BeginInvoke(() =>
                 {
                     if (MainWindow is MainWindow window)
-                        _ = window.OpenCompactRequestAsync(options);
+                    {
+                        if (options.AutomationBackground) _ = window.StartAutomationBackgroundAsync();
+                        else _ = window.OpenCompactRequestAsync(options);
+                    }
                 }));
             if (LaunchOptions.Enabled)
             {
@@ -146,6 +151,12 @@ public partial class App : Application
 
     private void ShowInitialWindow()
     {
+        if (AutomationBackground && MainWindow is MainWindow backgroundWindow)
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            _ = backgroundWindow.StartAutomationBackgroundAsync();
+            return;
+        }
         var startProjection = false;
         if (MainWindow is MainWindow setupWindow && !LaunchOptions.Enabled && new FirstRunSetupStore().Load().ShouldOpen)
             startProjection = setupWindow.ShowFirstRunSetup();

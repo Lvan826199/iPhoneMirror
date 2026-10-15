@@ -14,7 +14,7 @@ public partial class MainWindow
     private TrayPanelWindow? _trayPanel;
     private ProjectionSettingsWindow? _traySettingsWindow;
     private bool _startupServicesStarted;
-    internal bool IsTrayMode => _viewModel.IsTrayApplicationMode;
+    internal bool IsTrayMode => _viewModel.IsTrayApplicationMode || (Application.Current as App)?.AutomationBackground == true;
 
     internal void StartInTray()
     {
@@ -27,6 +27,7 @@ public partial class MainWindow
 
     private void StartDeviceServices()
     {
+        _ = StartAutomationOnStartupAsync();
         if (_startupServicesStarted) return;
         _startupServicesStarted = true;
         _refreshTimer.Start();
@@ -61,6 +62,7 @@ public partial class MainWindow
         catch (Exception error)
         {
             DisposeTray();
+            if ((Application.Current as App)?.AutomationBackground == true) return;
             _viewModel.SelectedApplicationDisplayMode = ApplicationDisplayMode.Complete;
             ShowInTaskbar = true;
             Show();
@@ -80,6 +82,7 @@ public partial class MainWindow
 
     private async Task MoveActiveProjectionToTrayAsync()
     {
+        if ((Application.Current as App)?.AutomationBackground == true) return;
         try
         {
             if (_mediaCastActive) ShowMediaCastPreviewWindow();
@@ -148,6 +151,7 @@ public partial class MainWindow
 
     private void QueueTrayProjection(string udid, ulong sessionHandle)
     {
+        if ((Application.Current as App)?.AutomationBackground == true) return;
         // Wait for session creation/recovery to release its gate before attaching
         // a renderer, and ignore callbacks invalidated by a stop or mode change.
         Dispatcher.BeginInvoke(new Action(async () =>

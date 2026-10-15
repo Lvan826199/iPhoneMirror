@@ -6,19 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <PlatformTarget>x64</PlatformTarget>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWPF>true</UseWPF>
+    <SelfContained>true</SelfContained>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="..\..\src\App\Services\BluetoothHidMouseService.cs"
-             Link="BluetoothHidMouseService.cs" />
-    <Compile Include="..\..\src\App\Services\BluetoothHidProtocol.cs"
-             Link="BluetoothHidProtocol.cs" />
-    <Compile Include="..\..\src\App\Services\BluetoothClientRouteTable.cs"
-             Link="BluetoothClientRouteTable.cs" />
-    <Compile Include="..\..\src\App\Services\BluetoothMouseReportCoalescer.cs"
-             Link="BluetoothMouseReportCoalescer.cs" />
-    <Compile Include="..\..\src\App\Services\DiagnosticLogger.cs"
-             Link="DiagnosticLogger.cs" />
-    <Compile Include="..\..\src\App\Services\AppLog.cs"
-             Link="AppLog.cs" />
+    <ProjectReference Include="..\..\src\App\iPhoneMirror.App.csproj" />
   </ItemGroup>
 </Project>

@@ -1,6 +1,7 @@
 #include "Capture/CaptureSession.h"
 #include "Device/AppleUsbDiscovery.h"
 #include "Capture/UsbConfigurationRestorePolicy.h"
+#include "Capture/UsbDisplaySize.h"
 
 #include "Transport/UsbMuxClient.h"
 
@@ -157,27 +158,6 @@ private:
     bool held_{};
     std::string_view device_fp_;
 };
-
-struct NativeDisplaySize { std::uint32_t width; std::uint32_t height; };
-
-NativeDisplaySize native_display_size(std::wstring_view product_type) noexcept {
-    // ProductType-to-panel-pixel mapping. Identifiers sharing a panel are
-    // grouped deliberately; HPD1 is sensitive to the exact portrait aspect.
-    // Keep unknown/new hardware on the highest empirically safe tier.
-    static constexpr std::pair<std::wstring_view, NativeDisplaySize> sizes[] = {
-        {L"iPhone13,1", {1080, 2340}}, // iPhone 12 mini
-        {L"iPhone14,4", {1080, 2340}}, // iPhone 13 mini
-        {L"iPhone18,3", {1206, 2622}}, // iPhone 17 test hardware
-        {L"iPad13,16", {1640, 2360}},  // iPad Air (5th generation)
-    };
-    for (const auto& [identifier, size] : sizes)
-        if (identifier == product_type) return size;
-    // A phone-shaped fallback makes unknown iPads negotiate an extreme aspect
-    // ratio. 1640x2360 is the conservative 4:3-class iPad capability used by
-    // current base/Air models; the stream's vdim remains authoritative.
-    if (product_type.starts_with(L"iPad")) return {1640, 2360};
-    return {1206, 2622};
-}
 
 bool same_video_decoder_configuration(const coremedia::FormatDescription& left,
     const coremedia::FormatDescription& right) noexcept {
@@ -1160,11 +1140,12 @@ CaptureSession::RunOpenState CaptureSession::prepare_run_open_log() noexcept {
     // failures here so the capture run can proceed without a diagnostic line.
     try {
         logging::write(std::format(
-            "capture_run begin device_fp={} backend={} product_type={} usb_display_size={}x{} render_fps_limit={} audio={} volume={:.3f} decoder_policy={} color_policy={}", state.device_fp,
+            "capture_run begin device_fp={} backend={} product_type={} usb_display_size={}x{} display_size_source={} render_fps_limit={} audio={} volume={:.3f} decoder_policy={} color_policy={}", state.device_fp,
             usb_backend_ == UsbBackend::LibUsb0 ? "libusb0" :
             usb_backend_ == UsbBackend::UsbDk ? "usbdk" : "libusb1",
             product_type_ascii,
             native.width, native.height,
+            native.model_known ? "model" : "fallback",
             target_fps(),
             play_audio_.load(std::memory_order_relaxed),
             audio_volume_.load(std::memory_order_relaxed),
@@ -1471,7 +1452,7 @@ void CaptureSession::run(std::stop_token stop_token) noexcept {
                         *libusb0_restore_identity, active_normal_request_sent);
                 });
                 logging::write(std::format(
-                    "usb_activation requested device_fp={} acknowledged={} expected_qt_config={}",
+                    "usb_activation requested device_fp={} helper_succeeded={} acknowledgment_scope=pnp_transition configuration_verified=false expected_qt_config={}",
                     device_fp, activation_acknowledged,
                     identity.expected_quicktime_configuration));
                 if (stop_token.stop_requested()) {
@@ -1479,7 +1460,7 @@ void CaptureSession::run(std::stop_token stop_token) noexcept {
                     return;
                 }
                 logging::write(std::format(
-                    "usb_reenumeration device_fp={} backend=libusb0 source=configuration_helper stable=true stop_requested=false",
+                    "usb_reenumeration device_fp={} backend=libusb0 source=configuration_helper pnp_stable=true configuration_verified=false stop_requested=false",
                     device_fp));
             }
             failure_stage = FailureStage::InterfaceOpen;

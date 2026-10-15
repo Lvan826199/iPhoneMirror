@@ -41,11 +41,12 @@ void require(bool condition, const std::string& message) {
     if (!condition) throw std::runtime_error(message);
 }
 
-int sample_owned_center(HWND window, std::string& diagnostic) {
+int sample_owned_pixel(HWND window, double x, double y, std::string& diagnostic) {
     RECT client{};
     require(GetClientRect(window, &client) != FALSE, "Cannot read test client bounds");
-    POINT point{(client.right - client.left) / 2, (client.bottom - client.top) / 2};
-    require(ClientToScreen(window, &point) != FALSE, "Cannot locate test client center");
+    POINT point{static_cast<LONG>((client.right - client.left) * x),
+        static_cast<LONG>((client.bottom - client.top) * y)};
+    require(ClientToScreen(window, &point) != FALSE, "Cannot locate test sample point");
     // Never sample another application's content if it covers our test window.
     const auto hit = WindowFromPoint(point);
     // WindowFromPoint can skip a STATIC child and return its owning host.
@@ -54,7 +55,7 @@ int sample_owned_center(HWND window, std::string& diagnostic) {
         : hit == nullptr ? "unavailable" : "other_window";
     diagnostic = std::string("WindowFromPoint=") + hit_kind;
     if (!hit || (hit != window && hit != GetParent(window))) {
-        diagnostic += " GetPixel=not_attempted (center is not confirmed owned)";
+        diagnostic += " GetPixel=not_attempted (sample point is not confirmed owned)";
         return -1;
     }
     const auto dc = GetDC(nullptr);
@@ -75,7 +76,7 @@ int wait_for_pixel(HWND window, int expected, const std::string& stage) {
     std::string diagnostic;
     do {
         pump_messages();
-        actual = sample_owned_center(window, diagnostic);
+        actual = sample_owned_pixel(window, 0.5, 0.5, diagnostic);
         if (actual >= 0 && std::abs(actual - expected) <= 18) return actual;
         std::this_thread::sleep_for(10ms);
     } while (std::chrono::steady_clock::now() < end);
@@ -87,6 +88,76 @@ struct TestWindow {
     HWND handle{};
     ~TestWindow() { if (handle) DestroyWindow(handle); }
 };
+
+void check_rotated_quadrants(HWND window, const std::string& stage, int turns) {
+    // Source quadrants have different gray levels so clockwise/counterclockwise
+    // rotation, double rotation and an unrotated letterboxed image all differ.
+    constexpr int levels[] = {48, 96, 160, 208};
+    constexpr int order[4][4] = {
+        {0, 1, 2, 3}, {2, 0, 3, 1}, {3, 2, 1, 0}, {1, 3, 0, 2}};
+    const auto end = std::chrono::steady_clock::now() + 3s;
+    std::string diagnostic;
+    int actual = -1, expected = -1;
+    do {
+        pump_messages();
+        bool matches = true;
+        for (int quadrant = 0; quadrant < 4; ++quadrant) {
+            expected = levels[order[turns][quadrant]];
+            actual = sample_owned_pixel(window,
+                (quadrant & 1) ? 0.75 : 0.25,
+                (quadrant & 2) ? 0.75 : 0.25, diagnostic);
+            if (actual < 0 || std::abs(actual - expected) > 18) {
+                matches = false;
+                break;
+            }
+        }
+        if (matches) return;
+        std::this_thread::sleep_for(10ms);
+    } while (std::chrono::steady_clock::now() < end);
+    throw std::runtime_error(stage + ": expected quadrant near " +
+        std::to_string(expected) + ", got " + std::to_string(actual) + "; " + diagnostic);
+}
+
+void test_static_rotation(HWND window, D3D11PreviewRenderer& preview,
+    std::atomic<std::shared_ptr<const DecodedFrame>>& provided, const std::string& name) {
+    // Remove the clipping region used by the preceding repaint test and leave
+    // room in the owned background for both portrait and landscape children.
+    require(SetWindowRgn(window, nullptr, TRUE) != 0, name + ": cannot clear test region");
+    require(SetWindowPos(GetParent(window), nullptr, 0, 0, 300, 300,
+        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE) != FALSE,
+        name + ": cannot resize test background");
+    auto frame = std::make_shared<DecodedFrame>();
+    frame->width = frame->stride = 64;
+    frame->height = 128;
+    frame->timestamp_100ns = 2;
+    frame->color.range = iPhoneMirror::coremedia::ColorRange::Full;
+    frame->nv12.resize(64 * 128 * 3 / 2, 128);
+    constexpr std::uint8_t levels[] = {48, 96, 160, 208};
+    for (unsigned y = 0; y < frame->height; ++y)
+        for (unsigned x = 0; x < frame->width; ++x)
+            frame->nv12[y * frame->stride + x] = levels[(y >= 64 ? 2 : 0) + (x >= 32 ? 1 : 0)];
+    preview.set_image_adjustments(0, 1, 1, 1);
+    provided.store(frame);
+    for (const bool limited : {false, true}) {
+        preview.set_render_size_limit(limited ? 32 : 0, limited ? 64 : 0);
+        // Exercise both menu directions, 180 degrees, modulo normalization,
+        // and restoring portrait without advancing the source timestamp.
+        for (const int requested : {0, 1, 2, 3, 4, -1, 0}) {
+            const int turns = ((requested % 4) + 4) % 4;
+            require(SetWindowPos(window, nullptr, 0, 0,
+                (turns & 1) ? 240 : 120, (turns & 1) ? 120 : 240,
+                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE) != FALSE,
+                name + ": rotation resize failed");
+            preview.set_rotation(requested);
+            check_rotated_quadrants(window, name + (limited ? " limited" : " direct") +
+                " rotation=" + std::to_string(requested), turns);
+        }
+    }
+    require(frame->width == 64 && frame->height == 128 && frame->timestamp_100ns == 2 &&
+        frame->nv12.front() == 48 && frame->nv12[64 * 128 - 1] == 208,
+        name + ": local rotation changed the source frame");
+    std::cout << name << ": static portrait rotation passed in direct and limited passes\n";
+}
 
 constexpr auto OriginalProcedureProperty = L"PreviewStaticFrameSmoke.OriginalProcedure";
 
@@ -309,6 +380,7 @@ void run_surface(bool composition, const RECT& work, const wchar_t* window_class
     check_redraw(baseline + 64, name + " hidden static frame restored", restore_successes);
     require(synthetic->timestamp_100ns == 1,
         name + ": smoke test must never advance the source timestamp");
+    if (!retry_only) test_static_rotation(window.handle, preview, provided, name);
     std::cout << name << ": static frame retries, resize, retention, and restore passed; "
         << "occluded_attempts=" << occluded_calls << "; " << faults.diagnostic() << '\n';
 }

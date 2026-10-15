@@ -29,6 +29,7 @@ Apple DDI 不随标准安装包分发；反控首次准备 DDI 的网络需求�
 | `src/DriverInstaller` | 独立驱动管理器与提权操作入口 |
 | `src/Shared` / `src/SharedUI` | 共享下载/提权安全逻辑、主题、控件、窗口行为 |
 | `tools/usb_touch_bridge.py` / `tools/iostouch` | 当前 Python 反控桥及 QuickTime 配置下的 USBMux 共存支持 |
+| `src/App/Automation` / `docs/api` | 本地 HTTP Automation API、接入说明及 Python/curl 示例 |
 | `scripts` / `installer` / `.github/workflows` | 构建依赖、验证、打包、安装器与 CI |
 | `src/*.Tests` / `tests` | 托管、Python 及专项恢复测试；原生测试在各模块的 `tests` 下 |
 | `docs` / `updates` | 文档与版本说明、应用备用更新清单 |
@@ -125,6 +126,10 @@ $env:PATH = (Join-Path $PWD 'third_party/libusb/bin/x64') + ';' + $env:PATH
 | DriverInstaller.Tests | 驱动识别、错误分类、父驱动确认及恢复策略；模拟测试不等于完成真实驱动变更验证 |
 | Python unittest | 触控/键盘消息、桥接安全边界、USBMux 与恢复逻辑 |
 | PowerShell 验证 | 暂存源、依赖载荷、签名/哈希和安装器规则等专项检查 |
+
+`App.Runtime.Tests --automation-lifecycle` 包含后台准备/打开窗口的取消、管理锁释放、
+已有会话保护及新建会话清理回归。`--automation-lifecycle-long-startup` 另外运行一次
+46 秒的模拟反控启动，验证 API 不再用短于 DDI 准备期限的 45 秒超时中断启动；不连接手机。
 
 当前另有未接入默认构建的专项入口，例如：
 
