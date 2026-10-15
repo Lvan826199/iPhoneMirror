@@ -38,6 +38,49 @@ iPhoneMirror 的重要變更均記錄於此。已發布版本遵循[語意化版
 - 保留橋接元件檔案驗證的具體原因，避免統一顯示為無法識別的錯誤。
 - 在原有時限內重試 Apple 暫時性簽章錯誤，確認映像檔掛載狀態並處理損壞的 DDI 快取清單。啟動階段支援取消，清理過程保留原始錯誤，並補齊四種語言的處理建議。
 
+## [1.8.5-pre3] - 2026-10-15
+
+這是用於功能與相容性測試的預先發行版。
+
+### 新增與改進
+
+- 支援同時錄製與直播，可分別停止輸出；直播期間可儲存或捨棄已完成的錄製。
+- 設定精靈增加工具入口，改進裝置繫結、開發者模式引導與錯誤提示。
+- 改進 Automation API 的遠端文字輸入、工作階段管理、平行輸出與啟動取消處理。
+
+### 修正
+
+- 改進新裝置 USB 描述元與作用中配置的等待，修正部分裝置的顯示尺寸對應。
+- 改進 Apple USBMux 就緒偵測，支援偵測商店版 Apple Devices，並提供連接埠占用診斷。
+- 修正 Cryptex/DDI 準備階段的連線釋放、取消與逾時處理，封裝並驗證所需的執行階段能力。
+- 修正預覽重繪、鍵盤焦點、裝置切換與媒體輸出狀態處理問題。
+- 修正 SRS 測試服務的 HTTP 錯誤處理與多語言資源格式問題。
+- 應用程式與驅動管理員版本統一為 1.8.5-pre3。
+
+### 驗證範圍
+
+自動建置執行原生、Python、應用程式邏輯、驅動及本地化檢查。GitHub 託管環境不執行需要互動桌面的 WPF 執行階段測試。
+目標裝置上的 Apple 簽章、DDI 安裝與控制相容性，以及最終 ZIP/Setup 的完整安裝、升級、解除安裝與實機驗收仍需驗證；建置通過不代表這些情境已通過。
+
+### Added
+
+- Record and stream simultaneously, stop each output independently, and save or discard a completed recording while streaming continues.
+- Add setup tool entry points and improve device binding, developer mode guidance, and error messages.
+- Improve Automation API remote text input, session management, parallel output, and startup cancellation.
+
+### Fixed
+
+- Improve USB descriptor and active configuration readiness checks and correct display size mappings for selected devices.
+- Detect Apple USBMux readiness, including Microsoft Store Apple Devices support, and report port conflicts.
+- Bound Cryptex/DDI connection cleanup, cancellation, and timeouts, and verify the packaged runtime capabilities.
+- Fix preview redraw, keyboard focus, device switching, media output state handling, SRS HTTP errors, and localization formatting.
+- Align the application and driver manager versions at 1.8.5-pre3.
+
+### Notes
+
+Automated builds check native code, Python, application logic, drivers, and localization. WPF runtime tests requiring an interactive desktop are skipped on GitHub-hosted runners.
+Apple signing, DDI installation and control on target devices, and full installation, upgrade, removal, and device acceptance of the final ZIP/Setup remain to be verified.
+
 ## [1.8.5-pre] - 2026-10-06
 
 此版本為預先發行版，供功能與相容性測試使用。
