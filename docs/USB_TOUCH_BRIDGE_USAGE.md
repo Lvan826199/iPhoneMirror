@@ -71,7 +71,11 @@ manifest 构建号和 payload digest，再请求 Apple 个性化签名并安装�
 内置文件缺失或损坏时，回退缓存 `%LOCALAPPDATA%\iPhoneMirror\DDI\Cryptex1` 和下载。
 下载优先使用 `raw.githubusercontent.com`，连接或 HTTP
 错误时回退到 GitHub API 的同一固定提交，仍执行全部校验。`--ddi-dir` 的三文件 PersonalizedDMG
-目录适用于旧流程，不能代替 iOS 27 的 Cryptex 镜像。无线缺少 HID 时会通过同一台手机
+目录适用于 Personalized 流程。iOS 27 优先准备 Cryptex；若发生镜像拒绝、镜像不兼容
+或服务不可用，会在同一准备期限内尝试 pre2 的 Personalized 流程，并记录
+`developer_image_cryptex_fallback` 及原错误码。设备锁定、信任、连接、网络、超时与安装
+验证失败不会触发此回退。iOS 27 的已有镜像不会在恢复中被自动卸载；最终仍需真实 HID
+检查通过。无线缺少 HID 时会通过同一台手机
 的 USB 连接准备 DDI，然后重建无线会话；未插线时仍需先连接 USB 完成准备。
 
 ### 无线模式

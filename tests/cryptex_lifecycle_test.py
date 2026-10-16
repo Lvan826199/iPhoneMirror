@@ -161,6 +161,32 @@ class CryptexLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.transfers, list(enumerate([b'image', b'trust', b'ticket', b'info', b'hash'], 1)))
         self.assert_closed()
 
+    async def test_real_sdk_cryptex_rejection_can_reuse_pre2_image(self):
+        new_connection = self.rsd.start_remote_service
+        def rejected_connection(name):
+            connection = new_connection(name)
+            connection.send_receive_request = AsyncMock(return_value={
+                'cferr': {'cferr_domain': 'synthetic', 'cferr_code': 1,
+                          'cferr_userinfo': {'NSLocalizedDescription': 'unsupported operation'}}})
+            return connection
+        self.rsd.start_remote_service = rejected_connection
+        session = bridge.TouchSession(SimpleNamespace(emit=AsyncMock()), 120, 'synthetic')
+        lockdown = SimpleNamespace(product_version='27.0.1',
+                                   get_developer_mode_status=AsyncMock(return_value=True))
+        async def prepare(_):
+            await ddi.prepare_cryptex_ddi(self.rsd, session._emit_status)
+        with patch.object(session, '_prepare_cryptex_developer_image', prepare), \
+             patch.object(session, '_is_personalized_ddi_mounted', AsyncMock(return_value=True)) as inventory, \
+             patch.object(session, '_mount_personalized_ddi', AsyncMock()) as mount:
+            await session._preflight_developer_environment(lockdown)
+            inventory.assert_awaited_once_with(lockdown)
+            mount.assert_not_awaited()
+        warnings = [call.args[0] for call in session.ipc.emit.call_args_list
+                    if call.args[0].get('event') == 'warning']
+        self.assertEqual(warnings, [{'event': 'warning', 'code': 'developer_image_cryptex_fallback',
+            'message': 'Cryptex preparation failed (developer_image_mount_failed); trying Personalized DDI.'}])
+        self.assert_closed()
+
     async def test_connect_timeout_closes_partial_handshake(self):
         self.stall_handshake = True
         with self.assertRaises(ddi.BridgePrerequisiteError) as raised:

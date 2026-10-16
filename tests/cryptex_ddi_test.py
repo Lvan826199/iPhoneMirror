@@ -289,6 +289,137 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
             prepare.assert_not_awaited()
             legacy.assert_not_awaited()
 
+    async def test_cryptex_rejection_preserves_pre2_personalized_preparation(self):
+        for mounted in (False, True):
+            session = self.session()
+            lockdown = self.lockdown()
+            rejected = ddi.BridgePrerequisiteError('developer_image_mount_failed', 'Cryptex rejected')
+            with self.subTest(mounted=mounted), \
+                 patch.object(session, '_prepare_cryptex_developer_image', AsyncMock(side_effect=rejected)), \
+                 patch.object(session, '_is_personalized_ddi_mounted', AsyncMock(return_value=mounted)) as inventory, \
+                 patch.object(session, '_mount_personalized_ddi', AsyncMock()) as mount:
+                await session._preflight_developer_environment(lockdown)
+                inventory.assert_awaited_once_with(lockdown)
+                self.assertEqual(mount.await_count, int(not mounted))
+                self.assertTrue(session._ddi_uses_cryptex)
+
+    async def test_cryptex_fallback_is_limited_to_image_and_service_compatibility(self):
+        fallback_codes = {'developer_image_mount_failed', 'developer_image_bundle_invalid',
+                          'developer_image_download_incompatible', 'developer_image_tss_rejected',
+                          'developer_image_service_unavailable'}
+        terminal_codes = {'apple_device_locked', 'apple_device_not_trusted', 'apple_connection_lost',
+                          'device_identity_mismatch', 'developer_image_tss_timeout',
+                          'developer_image_tss_unavailable', 'developer_image_service_timeout',
+                          'developer_image_upload_timeout', 'developer_image_verification_failed',
+                          'developer_image_download_failed'}
+        for code in fallback_codes | terminal_codes:
+            session = self.session()
+            error = ddi.BridgePrerequisiteError(code, 'synthetic failure')
+            with self.subTest(code=code), \
+                 patch.object(session, '_prepare_cryptex_developer_image', AsyncMock(side_effect=error)), \
+                 patch.object(session, '_is_personalized_ddi_mounted', AsyncMock(return_value=True)) as legacy:
+                if code in fallback_codes:
+                    await session._preflight_developer_environment(self.lockdown())
+                    legacy.assert_awaited_once()
+                else:
+                    with self.assertRaises(ddi.BridgePrerequisiteError) as raised:
+                        await session._preflight_developer_environment(self.lockdown())
+                    self.assertIs(raised.exception, error)
+                    legacy.assert_not_awaited()
+
+    async def test_cancelled_cryptex_does_not_start_legacy_fallback(self):
+        session = self.session()
+        with patch.object(session, '_prepare_cryptex_developer_image', AsyncMock(side_effect=asyncio.CancelledError)), \
+             patch.object(session, '_is_personalized_ddi_mounted', AsyncMock()) as legacy:
+            with self.assertRaises(asyncio.CancelledError):
+                await session._preflight_developer_environment(self.lockdown())
+            legacy.assert_not_awaited()
+
+    async def test_legacy_fallback_shares_original_preparation_deadline(self):
+        session = self.session()
+        session._ddi_deadline = asyncio.get_running_loop().time() + .02
+        deadline = session._ddi_deadline
+        async def stalled(_):
+            await asyncio.Event().wait()
+        with patch.object(session, '_prepare_cryptex_developer_image', AsyncMock(side_effect=
+                ddi.BridgePrerequisiteError('developer_image_mount_failed', 'Cryptex rejected'))), \
+             patch.object(session, '_is_personalized_ddi_mounted', AsyncMock(return_value=False)), \
+             patch.object(session, '_mount_personalized_ddi', stalled):
+            with self.assertRaises(ddi.BridgePrerequisiteError) as raised:
+                await asyncio.wait_for(session._preflight_developer_environment(self.lockdown()), .5)
+        self.assertEqual(raised.exception.code, 'developer_image_prepare_timeout')
+        self.assertEqual(session._ddi_deadline, deadline)
+
+    async def test_wireless_usb_fallback_never_unmounts_existing_image(self):
+        session = self.session('wireless')
+        lockdown = self.lockdown()
+        with patch.object(session, '_create_lockdown_with_retry', AsyncMock(return_value=lockdown)), \
+             patch.object(session, '_prepare_cryptex_developer_image', AsyncMock(side_effect=
+                ddi.BridgePrerequisiteError('developer_image_mount_failed', 'Cryptex rejected'))), \
+             patch.object(session, '_is_personalized_ddi_mounted', AsyncMock(return_value=True)), \
+             patch.object(session, '_refresh_personalized_ddi', AsyncMock()) as refresh:
+            await session._prepare_ddi_for_remote_pairing()
+            refresh.assert_not_awaited()
+            lockdown.close.assert_awaited_once()
+
+    async def test_fallback_starts_only_after_preparation_tunnel_closes(self):
+        session = self.session()
+        lockdown = self.lockdown()
+        service = SimpleNamespace(close=AsyncMock())
+        tun = SimpleNamespace(set_peer=Mock())
+        result = SimpleNamespace(client=SimpleNamespace(tun=tun), address='::1', port=1234)
+        rsd = SimpleNamespace(udid=lockdown.udid, __aenter__=AsyncMock(), close=AsyncMock())
+        order = []
+        @contextlib.asynccontextmanager
+        async def tunnel(_):
+            try:
+                yield result
+            finally:
+                self.assertEqual(rsd.close.await_count, 1)
+                order.append('tunnel_closed')
+        @contextlib.asynccontextmanager
+        async def dial(*_):
+            yield SimpleNamespace(dial=AsyncMock())
+        async def close_remote(remote, stage):
+            await remote.close()
+        async def inventory(_):
+            self.assertEqual(order, ['tunnel_closed'])
+            service.close.assert_awaited_once()
+            return True
+        with patch.object(bridge.CoreDeviceTunnelProxy, 'create', AsyncMock(return_value=service)), \
+             patch.object(session, '_bounded_tunnel', tunnel), \
+             patch.object(userspace_tunnel, 'UserspaceDialPlane', dial), \
+             patch.object(bridge, 'RemoteServiceDiscoveryService', Mock(return_value=rsd)), \
+             patch.object(session, '_close_remote_service', close_remote), \
+             patch.object(bridge, 'prepare_cryptex_ddi', AsyncMock(side_effect=
+                ddi.BridgePrerequisiteError('developer_image_mount_failed', 'Cryptex rejected'))), \
+             patch.object(session, '_is_personalized_ddi_mounted', inventory):
+            await session._preflight_developer_environment(lockdown)
+        lockdown.close.assert_not_awaited()
+
+    async def test_failed_legacy_fallback_retains_both_failure_codes(self):
+        session = self.session()
+        rejected = ddi.BridgePrerequisiteError('developer_image_mount_failed', 'Cryptex rejected')
+        incompatible = ddi.BridgePrerequisiteError('developer_image_download_incompatible', 'legacy incompatible')
+        with patch.object(session, '_prepare_cryptex_developer_image', AsyncMock(side_effect=rejected)), \
+             patch.object(session, '_is_personalized_ddi_mounted', AsyncMock(return_value=False)), \
+             patch.object(session, '_mount_personalized_ddi', AsyncMock(side_effect=incompatible)):
+            with self.assertRaises(ddi.BridgePrerequisiteError) as raised:
+                await session._preflight_developer_environment(self.lockdown())
+            self.assertIs(raised.exception, incompatible)
+        warnings = [call.args[0] for call in session.ipc.emit.call_args_list
+                    if call.args[0].get('event') == 'warning']
+        self.assertTrue(any('developer_image_mount_failed' in item.get('message', '') for item in warnings))
+
+    async def test_cryptex_fallback_never_unmounts_existing_image_during_hid_recovery(self):
+        session = self.session()
+        session._ddi_uses_cryptex = session._ddi_was_mounted = True
+        with patch.object(session, '_connect_with_lockdown', AsyncMock(side_effect=[
+                ddi.BridgePrerequisiteError('touch_surface_unavailable', 'missing'), None])), \
+             patch.object(session, '_refresh_personalized_ddi', AsyncMock()) as refresh:
+            await session._connect_with_ddi_recovery(self.lockdown())
+            refresh.assert_not_awaited()
+
     async def test_missing_wireless_hid_prepares_usb_then_retries_wireless(self):
         session = self.session('wireless')
         session._ddi_uses_cryptex = True

@@ -2674,7 +2674,7 @@ class TouchSession:
             # its actual HID probe fails, prepare over the exact USB device
             # once, then build a new wireless RSD service snapshot.
             await self._prepare_ddi_for_remote_pairing()
-        elif self._ddi_was_mounted and not self._ddi_refresh_attempted:
+        elif not self._ddi_uses_cryptex and self._ddi_was_mounted and not self._ddi_refresh_attempted:
             self._ddi_refresh_attempted = True
             await self._refresh_personalized_ddi(lockdown)
 
@@ -2828,7 +2828,7 @@ class TouchSession:
             # This Lockdown client is explicitly USB, even though the control
             # session remains wireless. Prepare the correct DDI over it.
             await self._preflight_developer_environment(lockdown, usb_preparation=True)
-            if self._ddi_was_mounted and not self._ddi_refresh_attempted:
+            if not self._ddi_uses_cryptex and self._ddi_was_mounted and not self._ddi_refresh_attempted:
                 self._ddi_refresh_attempted = True
                 await self._refresh_personalized_ddi(lockdown)
         finally:
@@ -2855,7 +2855,8 @@ class TouchSession:
     async def _prepare_developer_environment(self, lockdown, *, usb_preparation=False) -> None:
         """Require Developer Mode and prepare the system's DDI before HID.
 
-        iOS 27 uses the Cryptex USB/RSD route. Older systems try the explicitly
+        iOS 27 prefers Cryptex USB/RSD, with Personalized fallback for image
+        or service compatibility failures. Personalized preparation tries the
         supplied bundle, environment bundle, then verified download/cache.
         """
         await self._emit_status('checking_developer_environment')
@@ -2906,10 +2907,29 @@ class TouchSession:
             # legacy image-mounter's unmount/remount recovery on this image.
             self._ddi_was_mounted = False
             if self.transport_mode == 'usb' or usb_preparation:
-                await self._prepare_cryptex_developer_image(lockdown)
-            # Wireless readiness still requires the real HID probe. A missing
-            # service triggers explicit USB preparation in its recovery path.
-            return
+                try:
+                    await self._prepare_cryptex_developer_image(lockdown)
+                    return
+                except BridgePrerequisiteError as error:
+                    # A new preparation route must not disable the pre2 route
+                    # on phones that still accept PersonalizedDMG. Only image
+                    # or service compatibility failures justify trying it;
+                    # preserve device, network, timeout and verification errors.
+                    if error.code not in {'developer_image_mount_failed',
+                                          'developer_image_bundle_invalid',
+                                          'developer_image_download_incompatible',
+                                          'developer_image_tss_rejected',
+                                          'developer_image_service_unavailable'}:
+                        raise
+                    await self.ipc.emit({'event': 'warning', 'code': 'developer_image_cryptex_fallback',
+                        'message': f'Cryptex preparation failed ({error.code}); trying Personalized DDI.'})
+                    # Keep _ddi_uses_cryptex set: an existing iOS 27 image
+                    # exposed by the legacy inventory may itself be a Cryptex.
+                    # Neither recovery path may automatically unmount it.
+            else:
+                # Wireless readiness still requires the real HID probe. A
+                # missing service triggers explicit USB preparation in recovery.
+                return
 
         try:
             self._ddi_was_mounted = await self._is_personalized_ddi_mounted(lockdown)

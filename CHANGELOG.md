@@ -7,6 +7,9 @@ All notable changes to iPhoneMirror are documented here. The project follows
 
 ### Fixed
 
+- Retry the existing Personalized DDI preparation on iOS 27 when Cryptex
+  preparation rejects the image or cannot provide its service. Keep the original
+  preparation deadline and failure diagnostics, and preserve existing images.
 - Automatically reconnect only the affected iPhone's USB port if Apple's
   management connection remains missing after wired mirroring cleanup. Request
   administrator approval when needed and verify recovery before reporting success.
