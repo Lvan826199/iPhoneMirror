@@ -419,7 +419,8 @@ internal static partial class Program
             sessions.Set(new DeviceCaptureState { Udid = btDevice.Udid, Handle = handle });
             AwaitBinding(vm.StartBluetoothControlAsync());
             BindingAssert(vm.ControlStatus.Current is { Stage: ControlStage.Failed } &&
-                vm.ControlStatus.Current.Error == LocalizationService.Get("ControlBluetoothBindingRequired") && !vm.IsBluetoothControlEnabled,
+                vm.ControlStatus.Current.Error == LocalizationService.Get("ControlBluetoothBindingRequired") +
+                    "\n\n" + LocalizationService.Get("ControlBluetoothBindingAdvice") && !vm.IsBluetoothControlEnabled,
                 "Bluetooth unbound failure behavior regressed.");
             var btProfile = bindings.CreateProfileFromIdentity("BT phone", DeviceIdentityType.Wired, btDevice.Udid, null).Profile!;
             bindings.Bind(btProfile.Id, DeviceIdentityType.Bluetooth, "hid-peer", "Peer", null, true);
