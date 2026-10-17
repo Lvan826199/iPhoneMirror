@@ -2894,6 +2894,7 @@ try
         Language = "zh-CN",
         Theme = AppTheme.Light,
         ApplicationDisplayMode = ApplicationDisplayMode.Lightweight,
+        CloseMainWindowToTray = true,
         WirelessReceiverBackend = WirelessReceiverBackend.UxPlay,
         BluetoothMouseSensitivity = 135,
         BluetoothMouseSensitivitySchema = 1,
@@ -2935,6 +2936,10 @@ try
         "update settings preserve theme preference");
     Equal(ApplicationDisplayMode.Lightweight, loadedSettings.ApplicationDisplayMode,
         "update settings preserve lightweight application mode");
+    Equal(true, loadedSettings.CloseMainWindowToTray,
+        "update settings preserve close-main-window-to-tray preference");
+    Equal(true, loadedSettings.Clone().CloseMainWindowToTray,
+        "cloned settings preserve close-main-window-to-tray preference");
     Equal(WirelessReceiverBackend.UxPlay, loadedSettings.WirelessReceiverBackend,
         "update settings preserve the selected UxPlay wireless backend");
     Equal(WirelessReceiverBackend.UxPlay, loadedSettings.Clone().WirelessReceiverBackend,
@@ -3056,6 +3061,8 @@ try
         "Bluetooth wheel sensitivity defaults to 1000 percent");
     Equal(ApplicationDisplayMode.Complete, defaults.ApplicationDisplayMode,
         "application display mode defaults to complete");
+    Equal(false, defaults.CloseMainWindowToTray,
+        "closing the main window to tray is opt-in");
     Equal(WirelessReceiverBackend.Original, defaults.WirelessReceiverBackend,
         "wireless receiver backend defaults to the original implementation");
     Equal(0, defaults.BluetoothPortraitMouseDirection,
@@ -4105,6 +4112,52 @@ Equal(true, WirelessReceiverConfiguration.IsSupportedDisplayProfile(1280, 720, 3
     "wireless 720p weak-network profile is supported");
 Equal(false, WirelessReceiverConfiguration.IsSupportedDisplayProfile(1280, 720, 60),
     "unsupported wireless profile combinations are rejected");
+Equal(CaptureMuxEndpointLease.KeyFor("00008120-001e29591a040032"),
+    CaptureMuxEndpointLease.KeyFor("00008120001E29591A040032"), "Capture mux identity normalization matches native helper");
+Equal<string?>(null, CaptureMuxEndpointLease.KeyFor("bad/path"), "Invalid capture mux identity rejected");
+using (var muxEndpoint = new CaptureMuxEndpointLease())
+{
+    const string fakeIdentity = "00000000-0000000000000000";
+    var muxKey = CaptureMuxEndpointLease.KeyFor(fakeIdentity)!;
+    Equal(false, muxEndpoint.Publish(fakeIdentity, "192.168.1.2:1234"), "Only loopback mux brokers accepted");
+    Equal(false, muxEndpoint.Publish(fakeIdentity, "127.0.0.1:65536"), "Out-of-range broker port rejected");
+    Equal(true, muxEndpoint.Publish(fakeIdentity, "127.0.0.1:32123"), "Child broker can be shared with orientation helper");
+    Environment.SetEnvironmentVariable(muxKey, "127.0.0.1:32124");
+    muxEndpoint.Dispose();
+    Equal("127.0.0.1:32124", Environment.GetEnvironmentVariable(muxKey), "Retiring owner does not erase a replacement broker");
+    Environment.SetEnvironmentVariable(muxKey, null);
+}
+var tabletOriginal = WirelessReceiverConfiguration.DisplayProfiles.Single(profile => profile.Id == "maximum-ipad");
+Equal(171, AppleDisplayCatalog.Products.SelectMany(product => product.Identifiers).Distinct().Count(),
+    "managed catalog includes every downloaded iPhone and iPad identifier");
+foreach (var catalogProduct in AppleDisplayCatalog.Products)
+    foreach (var catalogIdentifier in catalogProduct.Identifiers)
+    {
+        var nativeProfile = WirelessReceiverConfiguration.NativeProfileFor(catalogIdentifier)!;
+        Equal((catalogProduct.LongEdge, catalogProduct.LongEdge), (nativeProfile.Width, nativeProfile.Height),
+            $"{catalogIdentifier} native wireless capability keeps its long edge on either axis");
+        Equal(true, WirelessReceiverConfiguration.IsSupportedDisplayProfile(nativeProfile.Width, nativeProfile.Height, 60) &&
+            WirelessReceiverConfiguration.RequiresOriginalQualityWarning(nativeProfile),
+            "every generated original profile passes validation and keeps the stability notice");
+        Equal(false, nativeProfile.Label.Contains('{'), "native resolution labels format all placeholders");
+    }
+Equal<WirelessDisplayProfile?>(null, WirelessReceiverConfiguration.NativeProfileFor("iPad99,1"),
+    "unknown devices never invent an actual native resolution");
+Equal((2064u, 2752u), (AppleDisplayCatalog.Find("iPad17,3")!.Width, AppleDisplayCatalog.Find("iPad17,3")!.Height),
+    "13-inch M5 catalog does not inherit the 11-inch official article dimensions");
+Equal((2360u, 2360u, 60u), (tabletOriginal.Width, tabletOriginal.Height, tabletOriginal.FrameRate),
+    "iPad original profile uses its own direction-symmetric receiver capability");
+Equal(true, WirelessReceiverConfiguration.RequiresOriginalQualityWarning(tabletOriginal),
+    "iPad original profile preserves the original-quality stability notice");
+Equal(true, WirelessReceiverConfiguration.IsSupportedDisplayProfile(2360, 2360, 60),
+    "iPad original capability passes application validation");
+Equal(true, WirelessReceiverConfiguration.IsSupportedDisplayProfile(2732, 2732, 60) &&
+    WirelessReceiverConfiguration.RequiresOriginalQualityWarning(
+        WirelessReceiverConfiguration.DisplayProfiles.Single(profile => profile.Id == "maximum-ipad-pro")),
+    "12.9-inch iPad Pro has its own panel-sized original capability and stability notice");
+Equal((2880u, 2880u), (WirelessReceiverConfiguration.DisplayProfiles[0].Width,
+    WirelessReceiverConfiguration.DisplayProfiles[0].Height),
+    "adding iPad original leaves the verified iPhone orientation envelope unchanged");
 Equal(WirelessReceiverBackend.Original, WirelessReceiverConfiguration.NormalizeBackend(
         (WirelessReceiverBackend)99),
     "unknown wireless backend values normalize to the original implementation");

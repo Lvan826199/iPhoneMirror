@@ -42,6 +42,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\..\config\apple-display-catalog.json"
+                      LogicalName="IPhoneMirror.App.Devices.AppleDisplayCatalog.json" />
     <EmbeddedResource Include="..\..\config\uxplay-component.json"
                       LogicalName="IPhoneMirror.App.Components.UxPlay.json" />
     <EmbeddedResource Include="native\components\ffmpeg.sha256"

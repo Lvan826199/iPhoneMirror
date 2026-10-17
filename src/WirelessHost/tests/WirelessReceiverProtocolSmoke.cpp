@@ -1,4 +1,5 @@
 #include "IpcProtocol.h"
+#include "../../Shared/Devices/AppleDisplayCatalog.generated.h"
 
 #include <WinSock2.h>
 #include <WS2tcpip.h>
@@ -1046,10 +1047,18 @@ int wmain(int argc, wchar_t** argv) {
         std::cout << "Wireless receiver media-route smoke passed\n";
         return 0;
     }
-    const auto passed = environment_clean &&
+    auto passed = environment_clean &&
         probe_mode(host, L"mirror", 0x5A7FFEE6U) &&
         probe_mode(host, L"combined", 0x5A7FFEF7U) &&
-        probe_mode(host, L"combined", 0x5A7FFEF7U, std::nullopt, 2880, 2880, 60);
+        probe_mode(host, L"combined", 0x5A7FFEF7U, std::nullopt, 2880, 2880, 60) &&
+        probe_mode(host, L"combined", 0x5A7FFEF7U, std::nullopt, 2360, 2360, 60);
+    std::vector<std::uint32_t> catalog_edges;
+    for (const auto& display : iPhoneMirror::devices::AppleDisplays) {
+        if (std::find(catalog_edges.begin(), catalog_edges.end(), display.height) != catalog_edges.end()) continue;
+        catalog_edges.push_back(display.height);
+        if (passed) passed = probe_mode(host, L"combined", 0x5A7FFEF7U,
+            std::nullopt, display.height, display.height, 60);
+    }
     WSACleanup();
     if (!passed) {
         std::cerr << "Wireless receiver protocol smoke failed: environment_clean="

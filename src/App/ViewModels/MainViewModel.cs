@@ -387,15 +387,56 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         _usbControlFailed ? LocalizationService.Get("UsbControlRetry") :
         _wirelessControlEnabled ? LocalizationService.Get("UsbControlDisableWireless") : _usbControlEnabled ? LocalizationService.Get("UsbControlDisable") : LocalizationService.Get("UsbControlDefault");
 
+    private bool _closeToTrayActive;
+
+    public bool CloseMainWindowToTray
+    {
+        get => Application.Current is App app && app.UpdateSettings.CloseMainWindowToTray;
+        set
+        {
+            if (Application.Current is not App app ||
+                app.UpdateSettings.CloseMainWindowToTray == value) return;
+            var previous = app.UpdateSettings.CloseMainWindowToTray;
+            app.UpdateSettings.CloseMainWindowToTray = value;
+            if (!app.SaveUpdateSettings()) app.UpdateSettings.CloseMainWindowToTray = previous;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool CanRestoreMainWindowFromTray => _closeToTrayActive;
+
+    internal void EnterTrayOnMainWindowClose()
+    {
+        if (IsTrayApplicationMode) return;
+        // Closing to tray is temporary; preserve the user's startup mode.
+        _closeToTrayActive = true;
+        NotifyApplicationDisplayModeChanged();
+    }
+
+    internal void RestoreMainWindowFromTray()
+    {
+        if (!_closeToTrayActive) return;
+        _closeToTrayActive = false;
+        NotifyApplicationDisplayModeChanged();
+    }
+
+    private void NotifyApplicationDisplayModeChanged()
+    {
+        OnPropertyChanged(nameof(SelectedApplicationDisplayMode));
+        OnPropertyChanged(nameof(IsLightweightApplicationMode));
+        OnPropertyChanged(nameof(IsTrayApplicationMode));
+        OnPropertyChanged(nameof(CanRestoreMainWindowFromTray));
+    }
+
     public ApplicationDisplayMode SelectedApplicationDisplayMode
     {
-        get => Application.Current is App app
+        get => _closeToTrayActive ? ApplicationDisplayMode.Tray : Application.Current is App app
             ? app.UpdateSettings.ApplicationDisplayMode
             : ApplicationDisplayMode.Complete;
         set
         {
             if (Application.Current is not App app ||
-                app.UpdateSettings.ApplicationDisplayMode == value) return;
+                (app.UpdateSettings.ApplicationDisplayMode == value && !_closeToTrayActive)) return;
             var previous = app.UpdateSettings.ApplicationDisplayMode;
             app.UpdateSettings.ApplicationDisplayMode = value;
             if (!app.SaveUpdateSettings())
@@ -404,9 +445,8 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(SelectedApplicationDisplayMode));
                 return;
             }
-            OnPropertyChanged(nameof(SelectedApplicationDisplayMode));
-            OnPropertyChanged(nameof(IsLightweightApplicationMode));
-            OnPropertyChanged(nameof(IsTrayApplicationMode));
+            _closeToTrayActive = false;
+            NotifyApplicationDisplayModeChanged();
             AddDiagnosticLog(AppLog.Event("application_display_mode_changed",
                 ("mode", value.ToString())));
         }

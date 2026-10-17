@@ -3,6 +3,8 @@
 #include "Media/CoreMedia.h"
 #include "Media/H264.h"
 #include "Media/MediaFoundationDecoder.h"
+#include "Media/BundledH264Decoder.h"
+#include "Avc444Fixture.h"
 #include "Protocol/Plist.h"
 #include "Protocol/QuickTimePacket.h"
 #include "Protocol/QuickTimeSession.h"
@@ -12,6 +14,7 @@
 #include "Transport/QtUsbTransport.h"
 #include "Capture/CaptureSession.h"
 #include "Capture/UsbDisplaySize.h"
+#include "Capture/UsbOrientationMonitor.h"
 #include "Capture/WirelessCaptureSession.h"
 #include "Device/AppleUsbDiscovery.h"
 #include "Device/DeviceManager.h"
@@ -331,6 +334,15 @@ void test_gpu_frame_readback() {
 }
 
 void test_h264() {
+    const auto high444 = iPhoneMirror::h264::sample_format_from_sps(avc444_fixture::sps);
+    check(high444 && high444->chroma_format == 3 && high444->bit_depth_luma == 8 &&
+        high444->bit_depth_chroma == 8, "High 4:4:4 SPS exposes the unsupported MFT input format");
+    check(!iPhoneMirror::h264::sample_format_from_sps(
+        std::span(avc444_fixture::sps).first(4)), "truncated high-profile SPS rejected");
+    const std::array<std::uint8_t, 4> baseline_sps{0x67, 66, 0, 30};
+    const auto baseline = iPhoneMirror::h264::sample_format_from_sps(baseline_sps);
+    check(baseline && baseline->chroma_format == 1 && baseline->bit_depth_luma == 8,
+        "baseline AVC keeps the existing 4:2:0 decoder path");
     const std::vector<std::uint8_t> avcc{
         0, 0, 0, 3, 0x65, 0xaa, 0xbb,
         0, 0, 0, 2, 0x41, 0xcc,
@@ -346,6 +358,259 @@ void test_h264() {
         const std::vector<std::uint8_t> truncated{0, 0, 0, 8, 0x65};
         (void)iPhoneMirror::h264::avcc_to_annex_b(truncated);
     }, "truncated AVCC rejected");
+}
+
+void test_decoded_frame_rotation() {
+    using namespace iPhoneMirror::media;
+    using iPhoneMirror::coremedia::display_rotation_turns;
+    check(display_rotation_turns(0) == 0U && display_rotation_turns(3) == 2U &&
+        display_rotation_turns(4) == 1U && display_rotation_turns(7) == 3U,
+        "QuickTime Home-screen orientation values map to verified pixel rotations");
+    check(!display_rotation_turns(std::nullopt) && !display_rotation_turns(1) &&
+        !display_rotation_turns(2) && !display_rotation_turns(5) &&
+        !display_rotation_turns(6) && !display_rotation_turns(99),
+        "missing and unverified orientations never guess a transform");
+    for (const auto pixel_format : {PixelFormat::Nv12, PixelFormat::P010}) {
+        const std::size_t component = pixel_format == PixelFormat::P010 ? 2 : 1;
+        DecodedFrame original;
+        original.width = 4;
+        original.height = 2;
+        original.stride = static_cast<std::int32_t>(8 * component); // padded input
+        original.pixel_format = pixel_format;
+        original.timestamp_100ns = 123456;
+        original.nv12.assign(24 * component, 0xee);
+        for (unsigned y = 0; y < 2; ++y)
+            for (unsigned x = 0; x < 4; ++x)
+                for (std::size_t b = 0; b < component; ++b)
+                    original.nv12[y * original.stride + x * component + b] = static_cast<std::uint8_t>(y * 4 + x + 1);
+        for (unsigned x = 0; x < 4; ++x)
+            for (std::size_t b = 0; b < component; ++b)
+                original.nv12[16 * component + x * component + b] = static_cast<std::uint8_t>(11 + x);
+        for (unsigned turns = 1; turns <= 3; ++turns) {
+            auto rotated = original;
+            check(detail::rotate_decoded_frame(rotated, turns), "padded decoded frame rotates successfully");
+            const unsigned expected_width = turns & 1 ? 2 : 4;
+            const unsigned expected_height = turns & 1 ? 4 : 2;
+            check(rotated.width == expected_width && rotated.height == expected_height &&
+                rotated.timestamp_100ns == original.timestamp_100ns && rotated.pixel_format == pixel_format,
+                "rotation preserves frame timestamp and pixel format while updating geometry");
+            const std::array<std::array<unsigned, 8>, 3> luma{{
+                {{5,1,6,2,7,3,8,4}}, {{8,7,6,5,4,3,2,1}}, {{4,8,3,7,2,6,1,5}}}};
+            for (unsigned n = 0; n < 8; ++n)
+                check(rotated.nv12[n * component] == luma[turns - 1][n],
+                    "non-symmetric luma pattern has the expected clockwise rotation");
+            check(detail::rotate_decoded_frame(rotated, 4 - turns), "inverse pixel rotation succeeds");
+            for (unsigned y = 0; y < 2; ++y)
+                for (unsigned x = 0; x < 4; ++x)
+                    check(rotated.nv12[y * rotated.stride + x * component] == y * 4 + x + 1,
+                        "inverse rotation restores every luma pixel");
+            const auto uv_start = static_cast<std::size_t>(rotated.stride) * rotated.height;
+            for (unsigned x = 0; x < 4; ++x)
+                check(rotated.nv12[uv_start + x * component] == 11 + x,
+                    "inverse rotation preserves UV sample ordering without swapping color channels");
+        }
+    }
+    DecodedFrame invalid;
+    invalid.width = 4; invalid.height = 2; invalid.stride = 4;
+    check(!detail::rotate_decoded_frame(invalid, 1), "rotation rejects absent pixel planes");
+    for (const auto pixel_format : {PixelFormat::Nv12, PixelFormat::P010}) {
+        const std::size_t component = pixel_format == PixelFormat::P010 ? 2 : 1;
+        DecodedFrame odd;
+        odd.width = 3; odd.height = 5; odd.stride = static_cast<std::int32_t>(4 * component);
+        odd.pixel_format = pixel_format;
+        odd.nv12.resize(*detail::checked_video_buffer_size(3, 5, pixel_format), 0xee);
+        for (unsigned y = 0; y < 5; ++y)
+            for (unsigned x = 0; x < 3; ++x)
+                odd.nv12[y * odd.stride + x * component] = static_cast<std::uint8_t>(y * 3 + x);
+        for (unsigned n = 0; n < 12; ++n)
+            odd.nv12[20 * component + n * component] = static_cast<std::uint8_t>(50 + n);
+        const auto original = odd.nv12;
+        check(detail::rotate_decoded_frame(odd, 1) && odd.width == 5 && odd.height == 3 &&
+            odd.stride == 6 * component, "odd physical panel axes use padded chroma without rounding luma dimensions");
+        check(detail::rotate_decoded_frame(odd, 3), "inverse odd-size rotation succeeds");
+        for (unsigned y = 0; y < 5; ++y)
+            for (unsigned x = 0; x < 3; ++x)
+                check(odd.nv12[y * odd.stride + x * component] == original[y * 4 * component + x * component],
+                    "odd-size automatic rotation preserves all visible pixels");
+        for (unsigned n = 0; n < 12; ++n)
+            check(odd.nv12[20 * component + n * component] == 50 + n,
+                "odd-size inverse rotation preserves all interleaved UV pairs");
+    }
+}
+
+void test_system_orientation_timeline() {
+    using namespace iPhoneMirror::capture::detail;
+    using namespace std::chrono_literals;
+    const auto start = OrientationTimeline::Clock::now();
+    OrientationTimeline timeline;
+    check(!timeline.at(start), "native direction is unavailable before first system observation");
+    timeline.observe(2, start);
+    timeline.observe(4, start + 100ms);
+    timeline.observe(3, start + 200ms);
+    check(timeline.at(start + 50ms) == 2U, "queued portrait frame retains the direction at receipt");
+    check(timeline.at(start + 150ms) == 1U, "left landscape frame does not use a future system direction");
+    check(timeline.at(start + 250ms) == 3U, "opposite landscape uses the verified SpringBoard transform");
+    check(!timeline.at(start - 1ms) && !timeline.at(start + 1201ms),
+        "future-only and stale direction observations cannot authorize native output");
+    timeline.observe(99, start + 300ms);
+    timeline.observe(1, start + 50ms);
+    check(timeline.at(start + 300ms) == 3U, "unknown or reordered system observations do not replace valid direction");
+    check(springboard_rotation_turns(1) == 0U && !springboard_rotation_turns(0),
+        "upright system portrait and unknown orientation are distinct");
+    timeline.clear();
+    check(!timeline.at(start + 300ms), "direction helper failure immediately revokes cached rotation");
+    FastStreamReconnectGate native_idle;
+    check(!native_idle.request_for_silence(60s, 10ms, true),
+        "native static screen keeps its stream while audio and system direction remain live");
+    check(native_idle.request_for_silence(60s, 3s, true),
+        "native static-screen exemption never hides a simultaneous media outage");
+    FastStreamReconnectGate ordinary;
+    check(ordinary.request_for_silence(6s, 10ms),
+        "ordinary B retains video-stall recovery even when its audio remains live");
+}
+
+void test_display_fallback_with_busy_audio() {
+    using namespace iPhoneMirror;
+    using namespace std::chrono_literals;
+    capture::detail::DisplayReconfigureGate gate;
+    quicktime::SessionProtocol protocol(quicktime::SessionOptions{.native_airplay = true});
+    protocol.set_native_airplay(false);
+    const auto release = protocol.begin_display_reconfigure(2360, 2360);
+    check(release.size() == 1, "native fallback begins by releasing the old display");
+    const auto begin = capture::detail::DisplayReconfigureGate::Clock::now();
+    gate.begin(begin);
+    unsigned reattachments{};
+    // Audio arrives every 20ms: no idle USB read and no RELS are needed for
+    // the ordinary HPD1 to be issued within its display-release deadline.
+    for (unsigned packet = 0; packet < 150; ++packet) {
+        const auto now = begin + 20ms * packet;
+        if (gate.ready(now)) {
+            const auto attach = protocol.complete_display_reconfigure();
+            check(!attach.empty() && !contains_ascii(attach.front(), "Stevenote") &&
+                contains_ascii(attach.front(), "DisplaySize"),
+                "busy-audio fallback reattaches the ordinary B display");
+            check(now == begin + 1200ms, "continuous transport traffic cannot postpone the release deadline");
+            gate.finish();
+            ++reattachments;
+        }
+    }
+    check(reattachments == 1 && !gate.pending(), "fallback reattaches once and accepts subsequent video");
+    gate.begin(begin + 5s);
+    gate.observe_release();
+    check(gate.ready(begin + 5s), "a real RELS acknowledgment completes fallback without waiting for timeout");
+    gate.finish();
+    gate.observe_release();
+    check(!gate.ready(begin + 10s), "late RELS cannot cause a duplicate display reattachment");
+}
+
+void test_queued_frame_orientation_metadata() {
+    using namespace iPhoneMirror::capture::detail;
+    using namespace std::chrono_literals;
+    const auto received_at = OrientationTimeline::Clock::now();
+    OrientationTimeline timeline;
+    timeline.observe(2, received_at);
+    VideoInputMetadataQueue inputs;
+    inputs.push({100, received_at, timeline.at(received_at), true});
+    inputs.push({200, received_at + 20ms, 1U, true});
+    // While the decoder is delayed, live system direction keeps progressing
+    // and the old history is evicted. The sample's saved direction must live
+    // independently and must be selected by output PTS, not queue order.
+    for (unsigned observation = 1; observation <= 130; ++observation)
+        timeline.observe(3, received_at + observation * 100ms);
+    check(!timeline.at(received_at), "test decoder delay exceeds the retained live direction history");
+    const auto make_frame = [](std::int64_t pts) {
+        iPhoneMirror::media::DecodedFrame frame;
+        frame.width = 4; frame.height = 2; frame.stride = 4;
+        frame.timestamp_100ns = pts;
+        frame.nv12 = {1,2,3,4,5,6,7,8,11,12,13,14};
+        return frame;
+    };
+    auto later = make_frame(200);
+    check(apply_video_input_metadata(later, inputs.take(200), true, received_at + 13s) ==
+        FrameOrientationResult::Applied && later.width == 2 && later.height == 4 &&
+        later.nv12.front() == 5 && later.timestamp_100ns == 200 && later.received_at == received_at + 20ms,
+        "reordered output uses its own saved clockwise direction and receipt time");
+    auto earlier = make_frame(100);
+    check(apply_video_input_metadata(earlier, inputs.take(100), true, received_at + 13s) ==
+        FrameOrientationResult::Applied && earlier.width == 4 && earlier.height == 2 &&
+        earlier.nv12.front() == 8 && earlier.received_at == received_at,
+        "queued portrait frame retains its original direction after history eviction");
+    auto unmatched = make_frame(999);
+    const auto original_pixels = unmatched.nv12;
+    check(apply_video_input_metadata(unmatched, inputs.take(999), true, received_at) ==
+        FrameOrientationResult::MissingRequiredMetadata && unmatched.nv12 == original_pixels,
+        "native decoder output with no matching PTS is rejected instead of publishing raw rotated pixels");
+    inputs.push({300, received_at, std::nullopt, true});
+    unmatched.timestamp_100ns = 300;
+    check(apply_video_input_metadata(unmatched, inputs.take(300), true, received_at) ==
+        FrameOrientationResult::MissingRequiredMetadata,
+        "a native sample without observed system direction cannot authorize publication");
+    inputs.push({400, received_at, 0U, true});
+    unmatched.timestamp_100ns = 400;
+    check(apply_video_input_metadata(unmatched, inputs.take(400), true, received_at) ==
+        FrameOrientationResult::Applied && unmatched.nv12 == original_pixels,
+        "verified zero-degree orientation is valid metadata, not an absent direction");
+    check(apply_video_input_metadata(unmatched, VideoInputMetadata{401, received_at, 2U, true}, true, received_at) ==
+        FrameOrientationResult::MissingRequiredMetadata && unmatched.nv12 == original_pixels,
+        "direction belonging to a different PTS can never be applied to this frame");
+    for (std::int64_t pts = 0; pts < 513; ++pts) inputs.push({pts, received_at, 2U, true});
+    check(!inputs.take(0) && inputs.take(512).has_value(),
+        "bounded metadata queue expires only old entries and never invents a timestamp match");
+    inputs.clear();
+    check(!inputs.take(511), "decoder reset revokes metadata from the previous decoder lifetime");
+}
+
+void test_bundled_h264_444_decoder() {
+    using namespace iPhoneMirror;
+    check(media::BundledH264Decoder::available(), "packaged High 4:4:4 software decoder is available");
+    coremedia::FormatDescription format;
+    format.media_type = quicktime::fourcc('v', 'i', 'd', 'e');
+    format.codec = quicktime::fourcc('a', 'v', 'c', '1');
+    format.width = 64;
+    format.height = 48;
+    format.chroma_format = 3;
+    format.sequence_parameter_sets.emplace_back(avc444_fixture::sps.begin(), avc444_fixture::sps.end());
+    format.picture_parameter_sets.emplace_back(avc444_fixture::pps.begin(), avc444_fixture::pps.end());
+    std::vector<std::uint8_t> sample;
+    for (int shift = 24; shift >= 0; shift -= 8)
+        sample.push_back(static_cast<std::uint8_t>(avc444_fixture::idr.size() >> shift));
+    sample.insert(sample.end(), avc444_fixture::idr.begin(), avc444_fixture::idr.end());
+    media::MediaFoundationVideoDecoder decoder;
+    decoder.configure(format);
+    check(decoder.decoder_acceleration() == media::DecoderAcceleration::Software,
+        "High 4:4:4 reports software rather than falsely claiming hardware decoding");
+    auto frames = decoder.decode(sample, 1'000'000, 333'333);
+    check(frames.size() == 1 && frames[0].width == 64 && frames[0].height == 48 &&
+        frames[0].timestamp_100ns == 1'000'000 && !frames[0].nv12.empty(),
+        "real High 4:4:4 bitstream produces an unscaled NV12 frame with its original timestamp");
+    if (!frames.empty()) {
+        const auto [minimum, maximum] = std::minmax_element(frames[0].nv12.begin(),
+            frames[0].nv12.begin() + frames[0].stride * frames[0].height);
+        check(*maximum - *minimum > 100, "decoded test pattern retains image contrast");
+    }
+    decoder.flush();
+    frames = decoder.decode(sample, 2'000'000, 333'333);
+    check(frames.size() == 1 && frames[0].timestamp_100ns == 2'000'000,
+        "flushing High 4:4:4 resends parameter sets and preserves fresh timestamps");
+    check(decoder.drain().empty(), "low-latency 4:4:4 decoding leaves no delayed frame");
+    auto portrait = format;
+    portrait.width = 48;
+    portrait.height = 64;
+    portrait.sequence_parameter_sets = {std::vector<std::uint8_t>(avc444_fixture::portrait_sps.begin(), avc444_fixture::portrait_sps.end())};
+    portrait.picture_parameter_sets = {std::vector<std::uint8_t>(avc444_fixture::portrait_pps.begin(), avc444_fixture::portrait_pps.end())};
+    std::vector<std::uint8_t> rotated_sample;
+    for (int shift = 24; shift >= 0; shift -= 8)
+        rotated_sample.push_back(static_cast<std::uint8_t>(avc444_fixture::portrait_idr.size() >> shift));
+    rotated_sample.insert(rotated_sample.end(), avc444_fixture::portrait_idr.begin(), avc444_fixture::portrait_idr.end());
+    decoder.configure(portrait);
+    frames = decoder.decode(rotated_sample, 3'000'000, 333'333);
+    check(frames.size() == 1 && frames[0].width == 48 && frames[0].height == 64 &&
+        frames[0].timestamp_100ns == 3'000'000,
+        "new portrait parameter sets and IDR replace old landscape decoded geometry");
+    decoder.configure(format);
+    frames = decoder.decode(sample, 4'000'000, 333'333);
+    check(frames.size() == 1 && frames[0].width == 64 && frames[0].height == 48,
+        "decoder reconfiguration returns from portrait to landscape without stale frames");
 }
 
 void test_coremedia() {
@@ -438,6 +703,27 @@ void test_coremedia() {
         "AVCC NAL length size parsed");
     check(parsed_sample.format && parsed_sample.format->sequence_parameter_sets.size() == 1 &&
         parsed_sample.format->picture_parameter_sets.size() == 1, "AVCC SPS/PPS parsed");
+
+    // Captured QuickTime layout: satt contains keyv entries with uint16 idxk
+    // keys and tagged little-endian NSNumber values, not an XML plist.
+    const auto attachment = [&chunk, &append, &append32_to](std::uint32_t rotation) {
+        std::vector<std::uint8_t> number{3};
+        append32_to(number, rotation);
+        auto pair = chunk(iPhoneMirror::quicktime::fourcc('i', 'd', 'x', 'k'), {29, 0});
+        append(pair, chunk(iPhoneMirror::quicktime::fourcc('n', 'm', 'b', 'v'), number));
+        return chunk(iPhoneMirror::quicktime::fourcc('s', 'a', 't', 't'),
+            chunk(iPhoneMirror::quicktime::fourcc('k', 'e', 'y', 'v'), pair));
+    };
+    for (const auto rotation : {0U, 3U, 4U, 5U, 7U}) {
+        auto oriented = serialized;
+        append(oriented, attachment(rotation));
+        check(iPhoneMirror::coremedia::parse_sample_buffer(oriented).display_rotation == rotation,
+            "sample display orientation is retained separately from compressed dimensions");
+    }
+    auto invalid_rotation = serialized;
+    append(invalid_rotation, attachment(99));
+    check(!iPhoneMirror::coremedia::parse_sample_buffer(invalid_rotation).display_rotation,
+        "unknown display orientation does not rotate frames by a guessed amount");
 
     std::vector<std::uint8_t> hevc_format_payload;
     append(hevc_format_payload, chunk(iPhoneMirror::quicktime::fourcc('m', 'd', 'i', 'a'), media_type));
@@ -599,9 +885,10 @@ void test_usb_projection_modes() {
             "12.9-inch iPad Pro resolves to its native portrait panel");
         for (const auto mode : {UsbProjectionMode::Demo, UsbProjectionMode::AirPlay}) {
             const auto config = make_usb_display_configuration(mode, panel.width, panel.height);
-            check(config.session_options.requested_width == 2048 &&
+            check(config.session_options.requested_width ==
+                    (mode == UsbProjectionMode::Demo ? 2048U : 2732U) &&
                 config.session_options.requested_height == 2732,
-                "both native-sized modes preserve the iPad Pro panel request");
+                "A preserves panel axes and B preserves the same panel long edge in either orientation");
             check(contains_ascii(initial_hpd1(config.session_options), "DisplaySize"),
                 "iPad native request still includes DisplaySize required to start video");
         }
@@ -624,6 +911,24 @@ void test_usb_projection_modes() {
     const auto phone = native_display_size(L"iPhone13,1");
     check(phone.model_known && phone.width == 1080 && phone.height == 2340,
         "verified iPhone request is unchanged");
+    check(std::size(iPhoneMirror::devices::AppleDisplays) == 171,
+        "native display catalog covers the downloaded complete iPhone and iPad identifier index");
+    for (const auto& display : iPhoneMirror::devices::AppleDisplays) {
+        const auto found = native_display_size(display.product_type);
+        check(found.model_known && found.width == display.width && found.height == display.height,
+            "every exact ProductType resolves to the shared Apple physical display specification");
+        const auto native_mode = make_usb_display_configuration(UsbProjectionMode::AirPlay,
+            found.width, found.height, 0, 0, display.product_type.starts_with(L"iPad"),
+            display.product_type.starts_with(L"iPad"));
+        check(native_mode.session_options.requested_width == native_mode.session_options.requested_height &&
+            !native_mode.adaptive_reconfiguration,
+            "all iPhone and iPad B defaults remain symmetric and never restart USB for physical rotation");
+    }
+    check(native_display_size(L"iPhone10,3").width == 1125 && native_display_size(L"iPhone10,3").height == 2436,
+        "catalog records actual iPhone X panel pixels without rounding to an encoder allocation");
+    check(native_display_size(L"iPad17,3").width == 2064 && native_display_size(L"iPad17,3").height == 2752 &&
+        native_display_size(L"iPad17,1").height == 2420,
+        "M5 iPad Pro display sizes use separate verified Apple articles");
 
     const auto demo = make_usb_display_configuration(
         UsbProjectionMode::Demo, 1206, 2622);
@@ -643,19 +948,54 @@ void test_usb_projection_modes() {
     const auto airplay = make_usb_display_configuration(
         UsbProjectionMode::AirPlay, 1206, 2622);
     check(!airplay.session_options.demo_mode, "AirPlay mode disables Valeria");
-    check(airplay.session_options.requested_width == 1206 &&
+    check(airplay.session_options.requested_width == 2622 &&
         airplay.session_options.requested_height == 2622,
-        "AirPlay mode requests native portrait dimensions");
-    check(airplay.adaptive_reconfiguration,
-        "AirPlay mode enables adaptive display reconfiguration");
+        "AirPlay mode permits the native long edge in both orientations");
+    check(!airplay.adaptive_reconfiguration,
+        "AirPlay mode never feeds a downsampled first frame back as a new native request");
     check(contains_ascii(initial_hpd1(airplay.session_options), "DisplaySize"),
         "AirPlay HPD1 contains DisplaySize");
 
     const auto custom_airplay = make_usb_display_configuration(
         UsbProjectionMode::AirPlay, 1206, 2622, 1920, 1080);
     check(custom_airplay.session_options.requested_width == 1920 &&
-        custom_airplay.session_options.requested_height == 1080,
-        "AirPlay mode preserves advanced custom dimensions");
+        custom_airplay.session_options.requested_height == 1920,
+        "AirPlay mode preserves the advanced custom long edge in both orientations");
+
+    const auto native_airplay = make_usb_display_configuration(
+        UsbProjectionMode::AirPlay, 1640, 2360, 0, 0, true);
+    check(native_airplay.session_options.native_airplay && !native_airplay.session_options.demo_mode,
+        "native iPad presentation keeps Valeria disabled");
+    check(!native_airplay.adaptive_reconfiguration,
+        "native iPad presentation never overwrites the panel with a downsampled first frame");
+    check(native_airplay.session_options.requested_width == 4096 && native_airplay.session_options.requested_height == 4096,
+        "native default permits landscape timing without clipping the source to a lower tier");
+    const auto native_hpd1 = initial_hpd1(native_airplay.session_options);
+    check(contains_ascii(native_hpd1, "Stevenote") && contains_ascii(native_hpd1, "H264DecoderSupports444") &&
+        contains_ascii(native_hpd1, "DisplaySize"), "native iPad HPD1 carries the matched display and decoder capabilities");
+    iPhoneMirror::quicktime::SessionProtocol fallback_protocol(native_airplay.session_options);
+    fallback_protocol.set_native_airplay(false);
+    check(fallback_protocol.begin_display_reconfigure(2360, 2360).size() == 1,
+        "losing system direction releases the native display before renegotiating ordinary B");
+    const auto fallback_hpd1 = fallback_protocol.complete_display_reconfigure();
+    check(!fallback_hpd1.empty() && !contains_ascii(fallback_hpd1.front(), "Stevenote") &&
+        !contains_ascii(fallback_hpd1.front(), "H264DecoderSupports444") &&
+        contains_ascii(fallback_hpd1.front(), "DisplaySize"),
+        "ordinary fallback explicitly removes both native display and 444 decoder flags");
+    check(!contains_ascii(initial_hpd1(airplay.session_options), "Stevenote"),
+        "missing software runtime retains the compatible non-Stevenote request");
+    const auto custom_native = make_usb_display_configuration(
+        UsbProjectionMode::AirPlay, 1640, 2360, 2732, 2048, true);
+    check(custom_native.session_options.requested_width == 2732 && custom_native.session_options.requested_height == 2732,
+        "native custom requests use the long edge in both axes to preserve automatic rotation");
+    const auto tablet = make_usb_display_configuration(
+        UsbProjectionMode::AirPlay, 1640, 2360, 0, 0, false, true);
+    check(tablet.session_options.requested_width == 2360 && tablet.session_options.requested_height == 2360 &&
+        !tablet.session_options.native_airplay && !tablet.session_options.demo_mode && !tablet.adaptive_reconfiguration,
+        "normal iPad B sessions keep rotation available and never enable Stevenote as a hidden fallback");
+    check(!make_usb_display_configuration(UsbProjectionMode::Demo, 1640, 2360, 0, 0, true).session_options.native_airplay &&
+        !make_usb_display_configuration(UsbProjectionMode::Aisi, 1640, 2360, 0, 0, true).session_options.native_airplay,
+        "native decoder availability does not change A/C protocol modes");
 
     const auto aisi = make_usb_display_configuration(
         UsbProjectionMode::Aisi, 1206, 2622, 1920, 1080);
@@ -2017,6 +2357,8 @@ void test_wireless_multi_stream_isolation() {
         L"66:77:88:99:AA:BB", L"Second iPhone");
     first->set_identity(L"First iPhone", true);
     second->set_identity(L"Second iPhone", true);
+    first->set_metadata(L"iPad17,3", L"26.5.2");
+    second->set_metadata(L"iPhone19,2", L"26.5.2");
     first->attach(preferences);
     second->attach(preferences);
     check(!first->next_render_frame() && !second->next_render_frame(),
@@ -2086,6 +2428,18 @@ void test_wireless_multi_stream_isolation() {
     check(first->next_render_frame()->width == 2 &&
             first->next_render_frame() == first->latest_frame(),
         "wireless orientation changes replace the retained frame for every preview");
+    auto portrait_header = first_header;
+    portrait_header.width = 2; portrait_header.height = 4;
+    portrait_header.stride[0] = 2;
+    portrait_header.stride[1] = portrait_header.stride[2] = 1;
+    first->publish_video(portrait_header, first_i420);
+    check(first->snapshot().width == 2 && first->snapshot().height == 4 &&
+        first->latest_frame()->width == 2 && first->latest_frame()->height == 4,
+        "known physical panel metadata never overrides a newly decoded portrait frame's real size");
+    first->publish_video(first_header, first_i420);
+    check(first->snapshot().width == 4 && first->snapshot().height == 2 &&
+        first->latest_frame()->width == 4 && second->snapshot().width == 2,
+        "portrait-to-landscape return is automatic and does not alter another device stream");
 
     const auto video_frames_before_disconnect = first->snapshot().video_frames;
     first->set_identity(L"First iPhone", false);
@@ -2505,6 +2859,11 @@ int main(int argc, char** argv) {
         test_quicktime_framing();
         test_gpu_frame_readback();
         test_h264();
+        test_decoded_frame_rotation();
+        test_system_orientation_timeline();
+        test_display_fallback_with_busy_audio();
+        test_queued_frame_orientation_metadata();
+        test_bundled_h264_444_decoder();
         test_coremedia();
         test_upstream_capture_fixtures();
         test_session_protocol();

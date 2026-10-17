@@ -17,6 +17,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 
 namespace iPhoneMirror::audio {
 class WasapiRenderer;
@@ -39,6 +40,61 @@ public:
 };
 
 namespace detail {
+
+struct VideoInputMetadata {
+    std::int64_t timestamp{};
+    std::chrono::steady_clock::time_point received_at;
+    std::optional<unsigned> rotation_turns;
+    bool native_airplay{};
+};
+
+class VideoInputMetadataQueue {
+public:
+    void push(VideoInputMetadata metadata) {
+        entries_.push_back(std::move(metadata));
+        // Bound metadata independently of encoded media when a decoder stops
+        // returning timestamps. Expired entries can never be guessed later.
+        while (entries_.size() > 512) entries_.pop_front();
+    }
+    [[nodiscard]] std::optional<VideoInputMetadata> take(std::int64_t timestamp) {
+        for (auto entry = entries_.begin(); entry != entries_.end(); ++entry) {
+            if (entry->timestamp != timestamp) continue;
+            auto result = *entry;
+            entries_.erase(entry);
+            return result;
+        }
+        return std::nullopt;
+    }
+    void clear() noexcept { entries_.clear(); }
+private:
+    std::deque<VideoInputMetadata> entries_;
+};
+
+enum class FrameOrientationResult { Applied, MissingRequiredMetadata, InvalidPixels };
+[[nodiscard]] FrameOrientationResult apply_video_input_metadata(
+    media::DecodedFrame& frame, const std::optional<VideoInputMetadata>& metadata,
+    bool require_rotation, std::chrono::steady_clock::time_point fallback_received_at);
+
+// Display release may be missing while audio packets keep arriving. Completion
+// is driven by elapsed time on every transport iteration, never by an idle read.
+class DisplayReconfigureGate {
+public:
+    using Clock = std::chrono::steady_clock;
+    void begin(Clock::time_point now) noexcept {
+        pending_ = true; released_ = false;
+        deadline_ = now + std::chrono::milliseconds(1200);
+    }
+    void observe_release() noexcept { if (pending_) released_ = true; }
+    [[nodiscard]] bool pending() const noexcept { return pending_; }
+    [[nodiscard]] bool released() const noexcept { return released_; }
+    [[nodiscard]] bool ready(Clock::time_point now) const noexcept {
+        return pending_ && (released_ || now >= deadline_);
+    }
+    void finish() noexcept { pending_ = released_ = false; }
+private:
+    bool pending_{}, released_{};
+    Clock::time_point deadline_{};
+};
 
 struct VideoDimensions {
     std::uint32_t width{};
@@ -104,12 +160,12 @@ private:
 class FastStreamReconnectGate final {
 public:
     [[nodiscard]] bool request_for_silence(std::chrono::milliseconds video,
-        std::chrono::milliseconds media) noexcept {
+        std::chrono::milliseconds media, bool native_idle = false) noexcept {
         // Give video-only stalls a longer grace period, but do not let live
         // audio keep a frozen video stream from recovering indefinitely.
         constexpr auto media_limit = std::chrono::milliseconds(2500);
         constexpr auto video_limit = std::chrono::seconds(5);
-        return (video >= video_limit ||
+        return ((!native_idle && video >= video_limit) ||
             (video >= media_limit && media >= media_limit)) && request();
     }
 
@@ -216,7 +272,8 @@ struct UsbDisplayConfiguration {
 
 [[nodiscard]] UsbDisplayConfiguration make_usb_display_configuration(
     UsbProjectionMode mode, std::uint32_t native_width, std::uint32_t native_height,
-    std::uint32_t requested_width = 0, std::uint32_t requested_height = 0) noexcept;
+    std::uint32_t requested_width = 0, std::uint32_t requested_height = 0,
+    bool native_airplay_available = false, bool tablet = false) noexcept;
 
 class CaptureSession final : public ICaptureSession {
 public:

@@ -33,6 +33,7 @@ try {
         @((Get-Item -LiteralPath (Join-Path $source 'bridge_runtime_check.py'))) +
         @((Get-Item -LiteralPath (Join-Path $source 'ddi_support.py'))) +
         @((Get-Item -LiteralPath (Join-Path $source 'mdns_discovery.py'))) +
+        @((Get-Item -LiteralPath (Join-Path $source 'screen_orientation.py'))) +
         @(Get-ChildItem -LiteralPath (Join-Path $source 'iostouch') -Recurse -File -Filter '*.py')
     foreach ($file in $files) {
         $relative = $file.FullName.Substring($source.Length + 1)

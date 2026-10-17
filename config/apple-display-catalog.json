@@ -1,0 +1,1485 @@
+{
+  "schema": 1,
+  "retrievedOn": "2026-10-17",
+  "scope": [
+    "iPhone",
+    "iPad"
+  ],
+  "units": "physical panel pixels in portrait orientation",
+  "sources": [
+    {
+      "url": "https://api.github.com/repos/devicekit/DeviceKit/contents/Source/Device.swift.gyb",
+      "gitBlobSha": "63b4348a32a5110fb06ee3be7dc85ede8e0ee7b8",
+      "sha256": "38b85fda0ff4ff6e5d045bb055a69118efbb78131a53cf51b9bde7b141428bcc"
+    },
+    {
+      "url": "https://api.ipsw.me/v4/devices",
+      "sha256": "0563704e631fa34bb872be1804a1b9f7c27a56ff127295fd8a124a858206b1c0"
+    }
+  ],
+  "coverage": {
+    "identifierCount": 171,
+    "productCount": 99,
+    "missingIdentifiers": []
+  },
+  "products": [
+    {
+      "name": "iPad",
+      "family": "iPad",
+      "identifiers": [
+        "iPad1,1"
+      ],
+      "width": 768,
+      "height": 1024,
+      "longEdge": 1024,
+      "appleSpecUrl": "https://support.apple.com/kb/SP580",
+      "appleSpecTitle": "iPad - Technical Specifications - Apple Support",
+      "appleSpecSha256": "ac8a7eb67055f28eed3e6366c327e29679ceadfe2df16d02be2df339eef00d92",
+      "displayQuote": "l Display 9.7-inch (diagonal) LED-backlit glossy widescreen Multi-Touch display with IPS technology 1024-by-768-pixel resolution at 132 pixels per inch (ppi) Fingerprint-resistant oleophobic coating Support for display of multiple languages and ch"
+    },
+    {
+      "name": "iPad mini (5th generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad11,1",
+        "iPad11,2"
+      ],
+      "width": 1536,
+      "height": 2048,
+      "longEdge": 2048,
+      "appleSpecUrl": "https://support.apple.com/kb/SP788",
+      "appleSpecTitle": "iPad mini (5th generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "c37bbb58ab8b4d67195d7aa5380b218a757c7f3d30e24998ab769543a095d794",
+      "displayQuote": " Cable USB Power Adapter Display Retina display 7.9-inch (diagonal) LED-backlit Multi-Touch display 2048-by-1536 resolution at 326 pixels per inch (ppi) Wide color display (P3) True Tone display Fingerprint-resistant oleophobic coating Fully l"
+    },
+    {
+      "name": "iPad Air (3rd generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad11,3",
+        "iPad11,4"
+      ],
+      "width": 1668,
+      "height": 2224,
+      "longEdge": 2224,
+      "appleSpecUrl": "https://support.apple.com/kb/SP787",
+      "appleSpecTitle": "iPad Air (3rd generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "9933c001b5477e79e31a0e77410056697b1004b464009117e47395289df40072",
+      "displayQuote": "Cable USB Power Adapter Display Retina display 10.5-inch (diagonal) LED-backlit Multi-Touch display 2224-by-1668 resolution at 264 pixels per inch (ppi) Wide color display (P3) True Tone display Fingerprint-resistant oleophobic coating Fully l"
+    },
+    {
+      "name": "iPad (8th generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad11,6",
+        "iPad11,7"
+      ],
+      "width": 1620,
+      "height": 2160,
+      "longEdge": 2160,
+      "appleSpecUrl": "https://support.apple.com/kb/SP822",
+      "appleSpecTitle": "iPad (8th generation) - Technical specifications - Apple Support",
+      "appleSpecSha256": "47ea0777586010042b3ac550d8a5e76a3b2aa28b1369453d5abff3f896a03a18",
+      "displayQuote": "ter Display Retina display 10.2-inch (diagonal) LED-backlit Multi-Touch display with IPS technology 2160-by-1620-pixel resolution at 264 pixels per inch (ppi) 500 nits brightness Fingerprint-resistant oleophobic coating Supports Apple Pencil (1st g"
+    },
+    {
+      "name": "iPad (9th generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad12,1",
+        "iPad12,2"
+      ],
+      "width": 1620,
+      "height": 2160,
+      "longEdge": 2160,
+      "appleSpecUrl": "https://support.apple.com/kb/SP849",
+      "appleSpecTitle": "iPad (9th generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "19ca2b32ed59ee408ff4dcb1763d5e6c9fd664bdd70eae99f3970b1909713d60",
+      "displayQuote": "ter Display Retina display 10.2-inch (diagonal) LED-backlit Multi-Touch display with IPS technology 2160-by-1620-pixel resolution at 264 pixels per inch (ppi) True Tone display 500 nits brightness Fingerprint-resistant oleophobic coating Supports A"
+    },
+    {
+      "name": "iPad Air (4th generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad13,1",
+        "iPad13,2"
+      ],
+      "width": 1640,
+      "height": 2360,
+      "longEdge": 2360,
+      "appleSpecUrl": "https://support.apple.com/kb/SP828",
+      "appleSpecTitle": "iPad Air (4th generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "925218e87c28cb27b6fd2171e70d9ff9b22de63b90e233191eb7089658ccd54d",
+      "displayQuote": "ess. Liquid Retina display 10.9-inch (diagonal) LED-backlit Multi-Touch display with IPS technology 2360-by-1640-pixel resolution at 264 pixels per inch (ppi) Wide color display (P3) True Tone display Fingerprint-resistant oleophobic coating Fully "
+    },
+    {
+      "name": "iPad Air (5th generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad13,16",
+        "iPad13,17"
+      ],
+      "width": 1640,
+      "height": 2360,
+      "longEdge": 2360,
+      "appleSpecUrl": "https://support.apple.com/kb/SP866",
+      "appleSpecTitle": "iPad Air (5th generation) - Tech Specs - Apple Support",
+      "appleSpecSha256": "71e9376e7d5584de32f75ee8fc9ca4dab9a533ea5a0d53686573f4dbcedbac2d",
+      "displayQuote": "play Liquid Retina display 10.9-inch (diagonal) LED‑backlit Multi‑Touch display with IPS technology 2360-by-1640-pixel resolution at 264 pixels per inch (ppi) Wide color display (P3) True Tone display Fingerprint-resistant oleophobic coating Fully "
+    },
+    {
+      "name": "iPad (10th generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad13,18",
+        "iPad13,19"
+      ],
+      "width": 1640,
+      "height": 2360,
+      "longEdge": 2360,
+      "appleSpecUrl": "https://support.apple.com/kb/SP884",
+      "appleSpecTitle": "iPad (10th generation) - Tech Specs - Apple Support",
+      "appleSpecSha256": "b6ae3ae8e3b985fafed5c472a320acf0349c209b1fc6003092ee17e7295ad6ab",
+      "displayQuote": "B-C Power Adapter Display Liquid Retina display LED backlit Multi‑Touch display with IPS technology 2360-by-1640-pixel resolution at 264 ppi True Tone 500 nits brightness Fingerprint-resistant oleophobic coating Supports Apple Pencil (USB-C) , Appl"
+    },
+    {
+      "name": "iPad Pro (11-inch) (3rd generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad13,4",
+        "iPad13,5",
+        "iPad13,6",
+        "iPad13,7"
+      ],
+      "width": 1668,
+      "height": 2388,
+      "longEdge": 2388,
+      "appleSpecUrl": "https://support.apple.com/kb/SP843",
+      "appleSpecTitle": "iPad Pro, 11-inch (3rd generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "32a8a935e35d5f9f8c3f85330e58de2b73bf4536c807916fa93585dfca526329",
+      "displayQuote": "isplay Liquid Retina display 11-inch (diagonal) LED backlit Multi‑Touch display with IPS technology 2388-by-1668-pixel resolution at 264 pixels per inch (ppi) ProMotion technology Wide color display (P3) True Tone display Fingerprint-resistant oleo"
+    },
+    {
+      "name": "iPad Pro (12.9-inch) (5th generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad13,8",
+        "iPad13,9",
+        "iPad13,10",
+        "iPad13,11"
+      ],
+      "width": 2048,
+      "height": 2732,
+      "longEdge": 2732,
+      "appleSpecUrl": "https://support.apple.com/kb/SP844",
+      "appleSpecTitle": "iPad Pro, 12.9-inch (5th generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "1deb6be07c7aa64d1bcef5594f92124c5582d86716766994b85ec0a9325c2a56",
+      "displayQuote": "i‑Touch display with IPS technology 2D backlighting system with 2596 full‑array local dimming zones 2732-by-2048-pixel resolution at 264 pixels per inch (ppi) ProMotion technology Wide color display (P3) True Tone display Fingerprint-resistant oleo"
+    },
+    {
+      "name": "iPad mini (6th generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad14,1",
+        "iPad14,2"
+      ],
+      "width": 1488,
+      "height": 2266,
+      "longEdge": 2266,
+      "appleSpecUrl": "https://support.apple.com/kb/SP850",
+      "appleSpecTitle": "iPad mini (6th generation) - Tech Specs - Apple Support",
+      "appleSpecSha256": "bf4092d3c404f69417ebef173361b61fef9ec996922590263a51bcc0137f0a40",
+      "displayQuote": "B-C Power Adapter Display Liquid Retina display LED backlit Multi-Touch display with IPS technology 2266-by-1488 resolution at 326 ppi Wide color (P3) True Tone Fingerprint-resistant oleophobic coating Fully laminated Antireflective coating 50"
+    },
+    {
+      "name": "iPad Air (13-inch) (M2)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad14,10",
+        "iPad14,11"
+      ],
+      "width": 2048,
+      "height": 2732,
+      "longEdge": 2732,
+      "appleSpecUrl": "https://support.apple.com/119893",
+      "appleSpecTitle": "iPad Air 13-inch (M2) - Tech Specs - Apple Support",
+      "appleSpecSha256": "ad7d0571617ce0240aa8eeb2fe7c926d670b086334cd968c98aa66d70281fb26",
+      "displayQuote": "B‑C Power Adapter Display Liquid Retina display LED backlit Multi‑Touch display with IPS technology 2732-by-2048-pixel resolution at 264 ppi Wide color (P3) True Tone Fingerprint-resistant oleophobic coating Fully laminated Antireflective coating 6"
+    },
+    {
+      "name": "iPad Pro (11-inch) (4th generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad14,3",
+        "iPad14,4"
+      ],
+      "width": 1668,
+      "height": 2388,
+      "longEdge": 2388,
+      "appleSpecUrl": "https://support.apple.com/kb/SP882",
+      "appleSpecTitle": "iPad Pro 11-inch (4th generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "73b50b042606096544759dc275772294f2d43e66764348ccf20fb49e3c9a052e",
+      "displayQuote": "isplay Liquid Retina display 11-inch (diagonal) LED backlit Multi‑Touch display with IPS technology 2388-by-1668-pixel resolution at 264 pixels per inch (ppi) ProMotion technology Wide color display (P3) True Tone display Fingerprint-resistant oleo"
+    },
+    {
+      "name": "iPad Pro (12.9-inch) (6th generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad14,5",
+        "iPad14,6"
+      ],
+      "width": 2048,
+      "height": 2732,
+      "longEdge": 2732,
+      "appleSpecUrl": "https://support.apple.com/kb/SP883",
+      "appleSpecTitle": "iPad Pro 12.9-inch (6th generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "49e9d1d6bc8656e65639babfe03c85c2e5db525759e31abfc23c9a6a0f0acee4",
+      "displayQuote": "i‑Touch display with IPS technology 2D backlighting system with 2596 full‑array local dimming zones 2732-by-2048-pixel resolution at 264 pixels per inch (ppi) ProMotion technology Wide color display (P3) True Tone display Fingerprint-resistant oleo"
+    },
+    {
+      "name": "iPad Air (11-inch) (M2)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad14,8",
+        "iPad14,9"
+      ],
+      "width": 1640,
+      "height": 2360,
+      "longEdge": 2360,
+      "appleSpecUrl": "https://support.apple.com/119894",
+      "appleSpecTitle": "iPad Air 11-inch (M2) - Tech Specs - Apple Support",
+      "appleSpecSha256": "bcaa4efead6473802ea34bacbfe6df9736ec7fe3303262b74a0734d2130cea4f",
+      "displayQuote": "B‑C Power Adapter Display Liquid Retina display LED backlit Multi‑Touch display with IPS technology 2360-by-1640-pixel resolution at 264 ppi Wide color (P3) True Tone Fingerprint-resistant oleophobic coating Fully laminated Antireflective coating 5"
+    },
+    {
+      "name": "iPad Air (11-inch) (M3)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad15,3",
+        "iPad15,4"
+      ],
+      "width": 1640,
+      "height": 2360,
+      "longEdge": 2360,
+      "appleSpecUrl": "https://support.apple.com/122241",
+      "appleSpecTitle": "iPad Air 11-inch (M3) - Tech Specs - Apple Support",
+      "appleSpecSha256": "a0c25ffd34294bafb01164fefe479b7fa4379e897d66e77bae2707fadecb2c0c",
+      "displayQuote": "B‑C Power Adapter Display Liquid Retina display LED backlit Multi‑Touch display with IPS technology 2360-by-1640-pixel resolution at 264 ppi Wide color (P3) True Tone Fingerprint-resistant oleophobic coating Fully laminated Antireflective coating 5"
+    },
+    {
+      "name": "iPad Air (13-inch) (M3)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad15,5",
+        "iPad15,6"
+      ],
+      "width": 2048,
+      "height": 2732,
+      "longEdge": 2732,
+      "appleSpecUrl": "https://support.apple.com/122242",
+      "appleSpecTitle": "iPad Air 13‑inch (M3) - Tech Specs - Apple Support",
+      "appleSpecSha256": "b26d961594069bb9729b62927b59aad7fd546e2f8ff7b4c4267afc3a0818c09d",
+      "displayQuote": "B‑C Power Adapter Display Liquid Retina display LED backlit Multi‑Touch display with IPS technology 2732-by-2048-pixel resolution at 264 ppi Wide color (P3) True Tone Fingerprint-resistant oleophobic coating Fully laminated Antireflective coating 6"
+    },
+    {
+      "name": "iPad (A16)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad15,7",
+        "iPad15,8"
+      ],
+      "width": 1640,
+      "height": 2360,
+      "longEdge": 2360,
+      "appleSpecUrl": "https://support.apple.com/122240",
+      "appleSpecTitle": "iPad (A16) - Tech Specs - Apple Support",
+      "appleSpecSha256": "83fd6e77861ec667f44ce165a9965cd2ee4747ff3c57c793cfed0697c288b2eb",
+      "displayQuote": "B-C Power Adapter Display Liquid Retina display LED backlit Multi‑Touch display with IPS technology 2360-by-1640-pixel resolution at 264 ppi True Tone 500 nits brightness Fingerprint-resistant oleophobic coating Supports Apple Pencil (USB-C), Apple"
+    },
+    {
+      "name": "iPad mini (A17 Pro)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad16,1",
+        "iPad16,2"
+      ],
+      "width": 1488,
+      "height": 2266,
+      "longEdge": 2266,
+      "appleSpecUrl": "https://support.apple.com/en-us/121456",
+      "appleSpecTitle": "iPad mini (A17 Pro) - Tech Specs - Apple Support",
+      "appleSpecSha256": "8dd14b14e2e856e5245e749fe41988562b7c6013fcb058b5b87177bb1912e6b7",
+      "displayQuote": "B-C Power Adapter Display Liquid Retina display LED backlit Multi-Touch display with IPS technology 2266-by-1488 resolution at 326 ppi Wide color (P3) True Tone Fingerprint-resistant oleophobic coating Fully laminated Antireflective coating 50"
+    },
+    {
+      "name": "iPad Air (13-inch) (M4)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad16,10",
+        "iPad16,11"
+      ],
+      "width": 2048,
+      "height": 2732,
+      "longEdge": 2732,
+      "appleSpecUrl": "https://support.apple.com/126472",
+      "appleSpecTitle": "iPad Air 13-inch (M4) - Tech Specs - Apple Support",
+      "appleSpecSha256": "d0b20830281a462b85cbf9aa316602deb5b51a90233c75822df243d5a1071bd0",
+      "displayQuote": "B‑C Power Adapter Display Liquid Retina display LED backlit Multi‑Touch display with IPS technology 2732-by-2048-pixel resolution at 264 ppi Wide color (P3) True Tone Fingerprint-resistant oleophobic coating Fully laminated Antireflective coating 6"
+    },
+    {
+      "name": "iPad Pro (11-inch) (M4)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad16,3",
+        "iPad16,4"
+      ],
+      "width": 1668,
+      "height": 2420,
+      "longEdge": 2420,
+      "appleSpecUrl": "https://support.apple.com/en-us/119892",
+      "appleSpecTitle": "iPad Pro 11‑inch (M4) - Tech Specs - Apple Support",
+      "appleSpecSha256": "aa9596c8f5159b97b831e0301c5d354a7dbca970858fcd63eca260c5ba704a5f",
+      "displayQuote": "Polishing cloth in nano-texture display glass option Display Ultra Retina XDR display Tandem OLED 3 2420-by-1668-pixel resolution at 264 ppi ProMotion technology with adaptive refresh rates from 10Hz to 120Hz Wide color (P3) True Tone Fingerprint-r"
+    },
+    {
+      "name": "iPad Pro (13-inch) (M4)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad16,5",
+        "iPad16,6"
+      ],
+      "width": 2064,
+      "height": 2752,
+      "longEdge": 2752,
+      "appleSpecUrl": "https://support.apple.com/en-us/119891",
+      "appleSpecTitle": "iPad Pro 13‑inch (M4) - Tech Specs - Apple Support",
+      "appleSpecSha256": "34e46281271a0e5c0071868914be46268d924a8f86aac57a8db5410ebb750ab8",
+      "displayQuote": "Polishing cloth in nano-texture display glass option Display Ultra Retina XDR display Tandem OLED 3 2752-by-2064-pixel resolution at 264 ppi ProMotion technology with adaptive refresh rates from 10Hz to 120Hz Wide color (P3) True Tone Fingerprint-r"
+    },
+    {
+      "name": "iPad Air (11-inch) (M4)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad16,8",
+        "iPad16,9"
+      ],
+      "width": 1640,
+      "height": 2360,
+      "longEdge": 2360,
+      "appleSpecUrl": "https://support.apple.com/126471",
+      "appleSpecTitle": "iPad Air 11-inch (M4) - Tech Specs - Apple Support",
+      "appleSpecSha256": "fd97bb4f09a913631b4a398476f1cd547b15758a51e394a4accba0643a042e02",
+      "displayQuote": "B‑C Power Adapter Display Liquid Retina display LED backlit Multi‑Touch display with IPS technology 2360-by-1640-pixel resolution at 264 ppi Wide color (P3) True Tone Fingerprint-resistant oleophobic coating Fully laminated Antireflective coating 5"
+    },
+    {
+      "name": "iPad Pro (11-inch) (M5)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad17,1",
+        "iPad17,2"
+      ],
+      "width": 1668,
+      "height": 2420,
+      "longEdge": 2420,
+      "appleSpecUrl": "https://support.apple.com/en-us/125406",
+      "appleSpecTitle": "iPad Pro 11‑inch (M5) - Tech Specs - Apple Support",
+      "appleSpecSha256": "319f4afab5cb2896ebd71e296b581ff852ae937337ef4aeba20d61c910eac4a3",
+      "displayQuote": "Polishing cloth in nano-texture display glass option Display Ultra Retina XDR display Tandem OLED 3 2420-by-1668-pixel resolution at 264 ppi ProMotion technology with adaptive refresh rates from 10Hz to 120Hz Wide color (P3) True Tone Fingerprint-r"
+    },
+    {
+      "name": "iPad Pro (13-inch) (M5)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad17,3",
+        "iPad17,4"
+      ],
+      "width": 2064,
+      "height": 2752,
+      "longEdge": 2752,
+      "appleSpecUrl": "https://support.apple.com/en-us/125407",
+      "appleSpecTitle": "iPad Pro 13‑inch (M5) - Tech Specs - Apple Support",
+      "appleSpecSha256": "9c6036ef363c9987fbedfe98bb5ec6c1a1a2ed4a5bcdc976918d19f1fa0f72a0",
+      "displayQuote": "Polishing cloth in nano-texture display glass option Display Ultra Retina XDR display Tandem OLED 3 2752-by-2064-pixel resolution at 264 ppi ProMotion technology with adaptive refresh rates from 10Hz to 120Hz Wide color (P3) True Tone Fingerprint-r"
+    },
+    {
+      "name": "iPad 2",
+      "family": "iPad",
+      "identifiers": [
+        "iPad2,1",
+        "iPad2,2",
+        "iPad2,3",
+        "iPad2,4"
+      ],
+      "width": 768,
+      "height": 1024,
+      "longEdge": 1024,
+      "appleSpecUrl": "https://support.apple.com/kb/SP622",
+      "appleSpecTitle": "iPad 2 - Technical Specifications - Apple Support",
+      "appleSpecSha256": "cb31f3230de3db0a7e280df4e3c099b902db07dcda382e72c82bb883ef181da7",
+      "displayQuote": "n Display 9.7-inch (diagonal) LED-backlit glossy widescreen Multi-Touch display with IPS technology 1024-by-768-pixel resolution at 132 pixels per inch (ppi) Fingerprint-resistant oleophobic coating Support for display of multiple languages and ch"
+    },
+    {
+      "name": "iPad mini",
+      "family": "iPad",
+      "identifiers": [
+        "iPad2,5",
+        "iPad2,6",
+        "iPad2,7"
+      ],
+      "width": 768,
+      "height": 1024,
+      "longEdge": 1024,
+      "appleSpecUrl": "https://support.apple.com/kb/SP661",
+      "appleSpecTitle": "iPad mini - Technical Specifications - Apple Support",
+      "appleSpecSha256": "1ab38ec414c5ddb0a66acd810a4b54c839e0c4879dbbefcaf77b82a0935636f8",
+      "displayQuote": "wireless technology Display 7.9-inch (diagonal) LED-backlit Multi-Touch display with IPS technology 1024-by-768 resolution at 163 pixels per inch (ppi) Fingerprint-resistant oleophobic coating Chip Dual-core A5 Cameras, Photos, and Video Reco"
+    },
+    {
+      "name": "iPad (3rd generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad3,1",
+        "iPad3,2",
+        "iPad3,3"
+      ],
+      "width": 1536,
+      "height": 2048,
+      "longEdge": 2048,
+      "appleSpecUrl": "https://support.apple.com/kb/SP647",
+      "appleSpecTitle": "iPad (3rd generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "5bbdd07d1dc77a62c7a25ae4cdb027be68eb2d098944dc3018b00b08928b85e3",
+      "displayQuote": "a display 9.7-inch (diagonal) LED-backlit glossy widescreen Multi-Touch display with IPS technology 2048-by-1536-pixel resolution at 264 pixels per inch (ppi) Fingerprint-resistant oleophobic coating Support for display of multiple languages and ch"
+    },
+    {
+      "name": "iPad (4th generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad3,4",
+        "iPad3,5",
+        "iPad3,6"
+      ],
+      "width": 1536,
+      "height": 2048,
+      "longEdge": 2048,
+      "appleSpecUrl": "https://support.apple.com/kb/SP662",
+      "appleSpecTitle": "iPad (4th generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "abd301a4b2499c458e421358f8fc5f5e833419bc3302758c262a0a9be29a3044",
+      "displayQuote": "logy Display Retina display 9.7-inch (diagonal) LED-backlit Multi-Touch display with IPS technology 2048-by-1536 resolution at 264 pixels per inch (ppi) Fingerprint-resistant oleophobic coating Chip Dual-core A6X with quad-core graphics Camera"
+    },
+    {
+      "name": "iPad Air",
+      "family": "iPad",
+      "identifiers": [
+        "iPad4,1",
+        "iPad4,2",
+        "iPad4,3"
+      ],
+      "width": 1536,
+      "height": 2048,
+      "longEdge": 2048,
+      "appleSpecUrl": "https://support.apple.com/kb/SP692",
+      "appleSpecTitle": "iPad Air - Technical Specifications - Apple Support",
+      "appleSpecSha256": "72f3373b21fd0039092337b4dbfd13fcca16dda523dc08fddf93c8204d591fb7",
+      "displayQuote": "8 g) Display Retina display 9.7-inch (diagonal) LED-backlit Multi-Touch display with IPS technology 2048-by-1536 resolution at 264 pixels per inch (ppi) Fingerprint-resistant oleophobic coating Chip A7 chip with 64-bit architecture and M7 moti"
+    },
+    {
+      "name": "iPad mini 2",
+      "family": "iPad",
+      "identifiers": [
+        "iPad4,4",
+        "iPad4,5",
+        "iPad4,6"
+      ],
+      "width": 1536,
+      "height": 2048,
+      "longEdge": 2048,
+      "appleSpecUrl": "https://support.apple.com/kb/SP693",
+      "appleSpecTitle": "iPad mini 2 with Retina display - Technical Specifications - Apple Support",
+      "appleSpecSha256": "bbb5c1b6ce31fb12522f7bcc74c405e28679ea7d0830c62047f52d6bfed2f2fb",
+      "displayQuote": "1 g) Display Retina display 7.9-inch (diagonal) LED-backlit Multi-Touch display with IPS technology 2048-by-1536 resolution at 326 pixels per inch (ppi) Fingerprint-resistant oleophobic coating Chip A7 chip with 64-bit architecture and M7 moti"
+    },
+    {
+      "name": "iPad mini 3",
+      "family": "iPad",
+      "identifiers": [
+        "iPad4,7",
+        "iPad4,8",
+        "iPad4,9"
+      ],
+      "width": 1536,
+      "height": 2048,
+      "longEdge": 2048,
+      "appleSpecUrl": "https://support.apple.com/kb/SP709",
+      "appleSpecTitle": "iPad mini 3 - Technical Specification - Apple Support",
+      "appleSpecSha256": "1cebe4aa971e5263dbc8d4a9016e668001076f5853d9d813ff663cf5c5d6c974",
+      "displayQuote": "1 g) Display Retina display 7.9-inch (diagonal) LED-backlit Multi-Touch display with IPS technology 2048-by-1536 resolution at 326 pixels per inch (ppi) Fingerprint-resistant oleophobic coating Chip A7 chip with 64‑bit architecture M7 motion c"
+    },
+    {
+      "name": "iPad mini 4",
+      "family": "iPad",
+      "identifiers": [
+        "iPad5,1",
+        "iPad5,2"
+      ],
+      "width": 1536,
+      "height": 2048,
+      "longEdge": 2048,
+      "appleSpecUrl": "https://support.apple.com/kb/SP725",
+      "appleSpecTitle": "iPad mini 4 - Technical Specifications - Apple Support",
+      "appleSpecSha256": "6674345ae47e01b470a360c1b5213444e9a0be5723d2dc6d230ef9cd5a7ccdaf",
+      "displayQuote": " Cable USB Power Adapter Display Retina display 7.9-inch (diagonal) LED-backlit Multi-Touch display 2048-by-1536 resolution at 326 pixels per inch (ppi) Fingerprint-resistant oleophobic coating Fully laminated display Antireflective coating Ch"
+    },
+    {
+      "name": "iPad Air 2",
+      "family": "iPad",
+      "identifiers": [
+        "iPad5,3",
+        "iPad5,4"
+      ],
+      "width": 1536,
+      "height": 2048,
+      "longEdge": 2048,
+      "appleSpecUrl": "https://support.apple.com/kb/SP708",
+      "appleSpecTitle": "iPad Air 2 - Technical Specification - Apple Support",
+      "appleSpecSha256": "26d9327b349cc986e0c17998145fac1594491553f38f07d6684e02de9a98f546",
+      "displayQuote": "pter Display Retina display 9.7-inch (diagonal) LED-backlit Multi-Touch display with IPS technology 2048-by-1536-pixel resolution at 264 ppi Fingerprint-resistant oleophobic coating Fully laminated display Antireflective coating Chip A8X chip with "
+    },
+    {
+      "name": "iPad (5th generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad6,11",
+        "iPad6,12"
+      ],
+      "width": 1536,
+      "height": 2048,
+      "longEdge": 2048,
+      "appleSpecUrl": "https://support.apple.com/kb/SP751",
+      "appleSpecTitle": "iPad (5th generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "544d52c3208fe4dc29e00ae976b043414b2708bbfdbde1a25fe95b2cee51870b",
+      "displayQuote": "pter Display Retina display 9.7-inch (diagonal) LED-backlit Multi-Touch display with IPS technology 2048-by-1536-pixel resolution at 264 ppi Fingerprint-resistant oleophobic coating Chip A9 chip with 64-bit architecture Embedded M9 coprocessor Came"
+    },
+    {
+      "name": "iPad Pro (9.7-inch)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad6,3",
+        "iPad6,4"
+      ],
+      "width": 1536,
+      "height": 2048,
+      "longEdge": 2048,
+      "appleSpecUrl": "https://support.apple.com/kb/SP739",
+      "appleSpecTitle": "iPad Pro (9.7-inch) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "66f01941f41ffadda815d6fb8a762b883b0b3b6dff24a158cbe23ca7992a977e",
+      "displayQuote": " Cable USB Power Adapter Display Retina display 9.7-inch (diagonal) LED-backlit Multi-Touch display 2048-by-1536 resolution at 264 pixels per inch (ppi) Wide color display (P3) True Tone display Fingerprint-resistant oleophobic coating Fully l"
+    },
+    {
+      "name": "iPad Pro (12.9-inch)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad6,7",
+        "iPad6,8"
+      ],
+      "width": 2048,
+      "height": 2732,
+      "longEdge": 2732,
+      "appleSpecUrl": "https://support.apple.com/kb/SP723",
+      "appleSpecTitle": "iPad Pro (12.9-inch) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "2e026ba383a8409b1edfe65e69b5aac3e08da429aaf9cec23027c853ba6bd387",
+      "displayQuote": "Cable USB Power Adapter Display Retina display 12.9-inch (diagonal) LED-backlit Multi-Touch display 2732-by-2048 resolution at 264 pixels per inch (ppi) Fingerprint-resistant oleophobic coating Fully laminated display Antireflective coating Su"
+    },
+    {
+      "name": "iPad Pro (12.9-inch) (2nd generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad7,1",
+        "iPad7,2"
+      ],
+      "width": 2048,
+      "height": 2732,
+      "longEdge": 2732,
+      "appleSpecUrl": "https://support.apple.com/kb/SP761",
+      "appleSpecTitle": "iPad Pro (12.9-inch) (2nd generation)  - Technical Specifications - Apple Support",
+      "appleSpecSha256": "ec93016c8c7a31a603dd5f23459968c9cb95d8c506fb3da71aab34d7e71c13f2",
+      "displayQuote": "Cable USB Power Adapter Display Retina display 12.9-inch (diagonal) LED-backlit Multi-Touch display 2732-by-2048 resolution at 264 pixels per inch (ppi) ProMotion technology Wide color display (P3) True Tone display Fingerprint-resistant oleop"
+    },
+    {
+      "name": "iPad (7th generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad7,11",
+        "iPad7,12"
+      ],
+      "width": 1620,
+      "height": 2160,
+      "longEdge": 2160,
+      "appleSpecUrl": "https://support.apple.com/kb/SP807",
+      "appleSpecTitle": "iPad (7th generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "0b78eddb9071f7e53adb27a97154f78def4ce4934dcc342af86ff28ed4314f50",
+      "displayQuote": "ter Display Retina display 10.2-inch (diagonal) LED-backlit Multi-Touch display with IPS technology 2160-by-1620-pixel resolution at 264 pixel per inch (ppi) 500 nits brightness Fingerprint-resistant oleophobic coating Supports Apple Pencil (1st ge"
+    },
+    {
+      "name": "iPad Pro (10.5-inch)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad7,3",
+        "iPad7,4"
+      ],
+      "width": 1668,
+      "height": 2224,
+      "longEdge": 2224,
+      "appleSpecUrl": "https://support.apple.com/kb/SP762",
+      "appleSpecTitle": "iPad Pro (10.5-inch) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "f0da6c9be08873feaca2f06d29e04be8656c1878d45c216afa3d0bf367f8a8f2",
+      "displayQuote": "Cable USB Power Adapter Display Retina display 10.5-inch (diagonal) LED-backlit Multi-Touch display 2224-by-1668 resolution at 264 pixels per inch (ppi) ProMotion technology Wide color display (P3) True Tone display Fingerprint-resistant oleop"
+    },
+    {
+      "name": "iPad (6th generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad7,5",
+        "iPad7,6"
+      ],
+      "width": 1536,
+      "height": 2048,
+      "longEdge": 2048,
+      "appleSpecUrl": "https://support.apple.com/kb/SP774",
+      "appleSpecTitle": "iPad (6th generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "99ea94273d626b2cf029c43233a5390bcaee880d0120a1738785f49c19e60b61",
+      "displayQuote": "pter Display Retina display 9.7-inch (diagonal) LED-backlit Multi-Touch display with IPS technology 2048-by-1536-pixel resolution at 264 ppi Fingerprint-resistant oleophobic coating Supports Apple Pencil (1st generation) Chip A10 Fusion chip with 6"
+    },
+    {
+      "name": "iPad Pro (11-inch)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad8,1",
+        "iPad8,2",
+        "iPad8,3",
+        "iPad8,4"
+      ],
+      "width": 1668,
+      "height": 2388,
+      "longEdge": 2388,
+      "appleSpecUrl": "https://support.apple.com/kb/SP784",
+      "appleSpecTitle": "iPad Pro 11-inch (1st generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "9750d1be98f911b03363940a48919addd8708db48e60c2ab8acf3c4e2ce09fc3",
+      "displayQuote": "isplay Liquid Retina display 11-inch (diagonal) LED-backlit Multi‑Touch display with IPS technology 2388-by-1668-pixel resolution at 264 pixels per inch (ppi) ProMotion technology Wide color display (P3) True Tone display Fingerprint-resistant oleo"
+    },
+    {
+      "name": "iPad Pro (12.9-inch) (4th generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad8,11",
+        "iPad8,12"
+      ],
+      "width": 2048,
+      "height": 2732,
+      "longEdge": 2732,
+      "appleSpecUrl": "https://support.apple.com/kb/SP815",
+      "appleSpecTitle": "iPad Pro 12.9-inch (4th generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "dd5aba90689cb404ea67f746f8795c1dcc583de951dd4760e455a5a7fd7c52ea",
+      "displayQuote": "play Liquid Retina display 12.9-inch (diagonal) LED-backlit Multi‑Touch display with IPS technology 2732-by-2048-pixel resolution at 264 pixels per inch (ppi) ProMotion technology Wide color display (P3) True Tone display Fingerprint-resistant oleo"
+    },
+    {
+      "name": "iPad Pro (12.9-inch) (3rd generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad8,5",
+        "iPad8,6",
+        "iPad8,7",
+        "iPad8,8"
+      ],
+      "width": 2048,
+      "height": 2732,
+      "longEdge": 2732,
+      "appleSpecUrl": "https://support.apple.com/kb/SP785",
+      "appleSpecTitle": "iPad Pro 12.9-inch (3rd generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "427b9bbf2655c2f772ac68448d6d3a0113c8866277f511d07903818567687f51",
+      "displayQuote": "play Liquid Retina display 12.9-inch (diagonal) LED-backlit Multi‑Touch display with IPS technology 2732-by-2048-pixel resolution at 264 pixels per inch (ppi) ProMotion technology Wide color display (P3) True Tone display Fingerprint-resistant oleo"
+    },
+    {
+      "name": "iPad Pro (11-inch) (2nd generation)",
+      "family": "iPad",
+      "identifiers": [
+        "iPad8,9",
+        "iPad8,10"
+      ],
+      "width": 1668,
+      "height": 2388,
+      "longEdge": 2388,
+      "appleSpecUrl": "https://support.apple.com/kb/SP814",
+      "appleSpecTitle": "iPad Pro 11-inch (2nd generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "8d5fc5faef4bd6cc81c56680e84330a560f06eb4b7f32ea1a85e8e444fae997c",
+      "displayQuote": "isplay Liquid Retina display 11-inch (diagonal) LED-backlit Multi‑Touch display with IPS technology 2388-by-1668-pixel resolution at 264 pixels per inch (ppi) ProMotion technology Wide color display (P3) True Tone display Fingerprint-resistant oleo"
+    },
+    {
+      "name": "iPhone",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone1,1"
+      ],
+      "width": 320,
+      "height": 480,
+      "longEdge": 480,
+      "appleSpecUrl": "https://support.apple.com/kb/SP2",
+      "appleSpecTitle": "iPhone - Technical Specifications - Apple Support",
+      "appleSpecSha256": "31cdee5c67224ff5d20554b1af731a14c1f93dbdbe330fa16691b6b94cd5c5b7",
+      "displayQuote": "cloth Capacity 8GB or 16GB flash drive 1 Display 3.5-inch (diagonal) widescreen Multi-Touch display 480-by-320-pixel resolution at 163 ppi Support for display of multiple languages and characters simultaneously Operating system iOS GSM Quad-band "
+    },
+    {
+      "name": "iPhone 3G",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone1,2"
+      ],
+      "width": 320,
+      "height": 480,
+      "longEdge": 480,
+      "appleSpecUrl": "https://support.apple.com/kb/SP495",
+      "appleSpecTitle": "iPhone 3G - Technical Specifications - Apple Support",
+      "appleSpecSha256": "821575240d006573b924f3527e7bf1cd11373f3fb7e1a471a9540eca976f853d",
+      "displayQuote": "ctest global energy efficiency standards Display 3.5-inch (diagonal) widescreen Multi-Touch display 480-by-320-pixel resolution at 163 ppi Support for display of multiple languages and characters simultaneously Audio Frequency response: 20Hz to 2"
+    },
+    {
+      "name": "iPhone 8",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone10,1",
+        "iPhone10,4"
+      ],
+      "width": 750,
+      "height": 1334,
+      "longEdge": 1334,
+      "appleSpecUrl": "https://support.apple.com/kb/SP767",
+      "appleSpecTitle": "iPhone 8 - Technical Specifications - Apple Support",
+      "appleSpecSha256": "fc83f0fb4264185ba247eac353c89b8555c0cd72d31d954069f055c4791e99b3",
+      "displayQuote": "isplay Retina HD display 4.7-inch (diagonal) widescreen LCD Multi-Touch display with IPS technology 1334-by-750-pixel resolution at 326 ppi 1400:1 contrast ratio (typical) True Tone display Wide color display (P3) 3D Touch 625 nits max brightness "
+    },
+    {
+      "name": "iPhone 8 Plus",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone10,2",
+        "iPhone10,5"
+      ],
+      "width": 1080,
+      "height": 1920,
+      "longEdge": 1920,
+      "appleSpecUrl": "https://support.apple.com/kb/SP768",
+      "appleSpecTitle": "iPhone 8 Plus - Technical Specifications - Apple Support",
+      "appleSpecSha256": "1057a41fe3a0f225dba5e520332cc539e401fb433ef477eac8d9072e8dbe1773",
+      "displayQuote": "isplay Retina HD display 5.5-inch (diagonal) widescreen LCD Multi-Touch display with IPS technology 1920-by-1080-pixel resolution at 401 ppi 1300:1 contrast ratio (typical) True Tone display Wide color display (P3) 3D Touch 625 nits max brightness "
+    },
+    {
+      "name": "iPhone X",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone10,3",
+        "iPhone10,6"
+      ],
+      "width": 1125,
+      "height": 2436,
+      "longEdge": 2436,
+      "appleSpecUrl": "https://support.apple.com/kb/SP770",
+      "appleSpecTitle": "iPhone X - Technical Specifications - Apple Support",
+      "appleSpecSha256": "daf81eae19b2e682ae1ebde2eee9e205230c036dddd767aa875df03d3e4d7b30",
+      "displayQuote": "Display Super Retina HD display 5.8-inch (diagonal) all-screen OLED Multi-Touch display HDR display 2436-by-1125-pixel resolution at 458 ppi 1,000,000:1 contrast ratio (typical) True Tone display Wide color display (P3) 3D Touch 625 cd/m2 max brigh"
+    },
+    {
+      "name": "iPhone Xs",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone11,2"
+      ],
+      "width": 1125,
+      "height": 2436,
+      "longEdge": 2436,
+      "appleSpecUrl": "https://support.apple.com/kb/SP779",
+      "appleSpecTitle": "iPhone XS - Technical Specifications - Apple Support",
+      "appleSpecSha256": "1816794eff0cd487d404e03f994dd94ccbbac54f0d86cd1a573484cfb3f5000b",
+      "displayQuote": "Display Super Retina HD display 5.8‑inch (diagonal) all‑screen OLED Multi‑Touch display HDR display 2436‑by-1125‑pixel resolution at 458 ppi 1,000,000:1 contrast ratio (typical) True Tone display Wide color display (P3) 3D Touch 625 cd/m2 max brigh"
+    },
+    {
+      "name": "iPhone Xs Max",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone11,4",
+        "iPhone11,6"
+      ],
+      "width": 1242,
+      "height": 2688,
+      "longEdge": 2688,
+      "appleSpecUrl": "https://support.apple.com/kb/SP780",
+      "appleSpecTitle": "iPhone XS Max - Technical Specifications - Apple Support",
+      "appleSpecSha256": "182744acda0d54916b73f615cbeceadbf44d736491b2b660873626646f4629de",
+      "displayQuote": "Display Super Retina HD display 6.5‑inch (diagonal) all‑screen OLED Multi‑Touch display HDR display 2688‑by-1242‑pixel resolution at 458 ppi 1,000,000:1 contrast ratio (typical) True Tone display Wide color display (P3) 3D Touch 625 cd/m2 max brigh"
+    },
+    {
+      "name": "iPhone Xʀ",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone11,8"
+      ],
+      "width": 828,
+      "height": 1792,
+      "longEdge": 1792,
+      "appleSpecUrl": "https://support.apple.com/kb/SP781",
+      "appleSpecTitle": "iPhone XR - Technical Specifications - Apple Support",
+      "appleSpecSha256": "d7c53da6af6a81b363c663ebadbe3b2c985c90c7b79d01ea19206d1282384f1d",
+      "displayQuote": "Liquid Retina HD display 6.1-inch (diagonal) all-screen LCD Multi-Touch display with IPS technology 1792-by-828-pixel resolution at 326 ppi 1400:1 contrast ratio (typical) True Tone display Wide color display (P3) Haptic Touch 625 nits max brightn"
+    },
+    {
+      "name": "iPhone 11",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone12,1"
+      ],
+      "width": 828,
+      "height": 1792,
+      "longEdge": 1792,
+      "appleSpecUrl": "https://support.apple.com/kb/SP804",
+      "appleSpecTitle": "iPhone 11 - Technical Specifications - Apple Support",
+      "appleSpecSha256": "e27c562f749760923b981720a4023e64bd3a26c5edf0663d70ca0d0894b666c2",
+      "displayQuote": "Liquid Retina HD display 6.1-inch (diagonal) all-screen LCD Multi-Touch display with IPS technology 1792-by-828-pixel resolution at 326 ppi 1400:1 contrast ratio (typical) True Tone display Wide color display (P3) Haptic Touch 625 nits max brightn"
+    },
+    {
+      "name": "iPhone 11 Pro",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone12,3"
+      ],
+      "width": 1125,
+      "height": 2436,
+      "longEdge": 2436,
+      "appleSpecUrl": "https://support.apple.com/kb/SP805",
+      "appleSpecTitle": "iPhone 11 Pro - Technical Specifications - Apple Support",
+      "appleSpecSha256": "bc981af29ca843f67151308fdde12326a677cc4f1712dd923ec18da494cc7dd8",
+      "displayQuote": "isplay Super Retina XDR display 5.8‑inch (diagonal) all‑screen OLED Multi‑Touch display HDR display 2436‑by-1125‑pixel resolution at 458 ppi 2,000,000:1 contrast ratio (typical) True Tone display Wide color display (P3) Haptic Touch 800 nits max br"
+    },
+    {
+      "name": "iPhone 11 Pro Max",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone12,5"
+      ],
+      "width": 1242,
+      "height": 2688,
+      "longEdge": 2688,
+      "appleSpecUrl": "https://support.apple.com/kb/SP806",
+      "appleSpecTitle": "iPhone 11 Pro Max - Technical Specifications - Apple Support",
+      "appleSpecSha256": "b802bb309bbc14478accb2aa022c9734d4e4b1ed33bd8994ba7a86d0ea82756e",
+      "displayQuote": "isplay Super Retina XDR display 6.5‑inch (diagonal) all‑screen OLED Multi‑Touch display HDR display 2688‑by-1242‑pixel resolution at 458 ppi 2,000,000:1 contrast ratio (typical) True Tone display Wide color display (P3) Haptic Touch 800 nits max br"
+    },
+    {
+      "name": "iPhone SE (2nd generation)",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone12,8"
+      ],
+      "width": 750,
+      "height": 1334,
+      "longEdge": 1334,
+      "appleSpecUrl": "https://support.apple.com/kb/SP820",
+      "appleSpecTitle": "iPhone SE (2nd generation) - Technical Specifications - Apple Support",
+      "appleSpecSha256": "7da063f4e3c958f3a36c6e2d21684cf4a1a88a6eeffa86d013a65c15754d64fb",
+      "displayQuote": "isplay Retina HD display 4.7-inch (diagonal) widescreen LCD Multi‑Touch display with IPS technology 1334-by-750-pixel resolution at 326 ppi 1400:1 contrast ratio (typical) True Tone display Wide color display (P3) Haptic Touch 625 nits max brightn"
+    },
+    {
+      "name": "iPhone 12 mini",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone13,1"
+      ],
+      "width": 1080,
+      "height": 2340,
+      "longEdge": 2340,
+      "appleSpecUrl": "https://support.apple.com/kb/SP829",
+      "appleSpecTitle": "iPhone 12 mini - Technical Specifications - Apple Support",
+      "appleSpecSha256": "9f7517e6598f7cc6ddaad24d56bb60449a2a1b3741edd1f64b9eacc6ed567853",
+      "displayQuote": ".76 ounces (135 grams) Display Super Retina XDR display 5.4‑inch (diagonal) all‑screen OLED display 2340‑by‑1080-pixel resolution at 476 ppi HDR display True Tone Wide color (P3) Haptic Touch 2,000,000:1 contrast ratio (typical) 625 nits max bright"
+    },
+    {
+      "name": "iPhone 12",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone13,2"
+      ],
+      "width": 1170,
+      "height": 2532,
+      "longEdge": 2532,
+      "appleSpecUrl": "https://support.apple.com/kb/SP830",
+      "appleSpecTitle": "iPhone 12 - Technical Specifications - Apple Support",
+      "appleSpecSha256": "72074b5c43afd959607bcc1598ff8b350a317e5c1c663f6f801304bc134ac9a7",
+      "displayQuote": ".78 ounces (164 grams) Display Super Retina XDR display 6.1‑inch (diagonal) all‑screen OLED display 2532‑by‑1170-pixel resolution at 460 ppi HDR display True Tone Wide color (P3) Haptic Touch 2,000,000:1 contrast ratio (typical) 625 nits max bright"
+    },
+    {
+      "name": "iPhone 12 Pro",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone13,3"
+      ],
+      "width": 1170,
+      "height": 2532,
+      "longEdge": 2532,
+      "appleSpecUrl": "https://support.apple.com/kb/SP831",
+      "appleSpecTitle": "iPhone 12 Pro - Technical Specifications - Apple Support",
+      "appleSpecSha256": "0f9c81005502a4a332b51f36a15f9773bb80326d58b35f9a26678a3da7c98a37",
+      "displayQuote": ".66 ounces (189 grams) Display Super Retina XDR display 6.1‑inch (diagonal) all‑screen OLED display 2532‑by‑1170-pixel resolution at 460 ppi HDR display True Tone Wide color (P3) Haptic Touch 2,000,000:1 contrast ratio (typical) 800 nits max bright"
+    },
+    {
+      "name": "iPhone 12 Pro Max",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone13,4"
+      ],
+      "width": 1284,
+      "height": 2778,
+      "longEdge": 2778,
+      "appleSpecUrl": "https://support.apple.com/kb/SP832",
+      "appleSpecTitle": "iPhone 12 Pro Max - Technical Specifications - Apple Support",
+      "appleSpecSha256": "e687d95404af3e1844143ba09cacf87f33afab43fe2f82a19a6219c9d3ba534b",
+      "displayQuote": ".03 ounces (228 grams) Display Super Retina XDR display 6.7‑inch (diagonal) all‑screen OLED display 2778‑by‑1284-pixel resolution at 458 ppi HDR display True Tone Wide color (P3) Haptic Touch 2,000,000:1 contrast ratio (typical) 800 nits max bright"
+    },
+    {
+      "name": "iPhone 13 Pro",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone14,2"
+      ],
+      "width": 1170,
+      "height": 2532,
+      "longEdge": 2532,
+      "appleSpecUrl": "https://support.apple.com/kb/SP852",
+      "appleSpecTitle": "iPhone 13 Pro - Technical Specifications - Apple Support",
+      "appleSpecSha256": "32fe1719e21b5a424f3a1f8a290e89b2be2a2a53fc5c3e4a1f7cdb4ae327fc78",
+      "displayQuote": " grams) Display Super Retina XDR display with ProMotion 6.1‑inch (diagonal) all‑screen OLED display 2532‑by‑1170-pixel resolution at 460 ppi ProMotion technology with adaptive refresh rates up to 120Hz HDR display True Tone Wide color (P3) Haptic T"
+    },
+    {
+      "name": "iPhone 13 Pro Max",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone14,3"
+      ],
+      "width": 1284,
+      "height": 2778,
+      "longEdge": 2778,
+      "appleSpecUrl": "https://support.apple.com/kb/SP848",
+      "appleSpecTitle": "iPhone 13 Pro Max - Technical Specifications - Apple Support",
+      "appleSpecSha256": "50f58b7fdc83d08a5255918b04c12758e733b58e49be49fa58d8975270d58478",
+      "displayQuote": " grams) Display Super Retina XDR display with ProMotion 6.7‑inch (diagonal) all‑screen OLED display 2778‑by‑1284-pixel resolution at 458 ppi ProMotion technology with adaptive refresh rates up to 120Hz HDR display True Tone Wide color (P3) Haptic T"
+    },
+    {
+      "name": "iPhone 13 mini",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone14,4"
+      ],
+      "width": 1080,
+      "height": 2340,
+      "longEdge": 2340,
+      "appleSpecUrl": "https://support.apple.com/kb/SP847",
+      "appleSpecTitle": "iPhone 13 mini - Technical Specifications - Apple Support",
+      "appleSpecSha256": "a4c5fff1516459ba46a8edea6f0341dbbe212b16a52900ac438fe12462c565b3",
+      "displayQuote": ".97 ounces (141 grams) Display Super Retina XDR display 5.4‑inch (diagonal) all‑screen OLED display 2340‑by‑1080-pixel resolution at 476 ppi HDR display True Tone Wide color (P3) Haptic Touch 2,000,000:1 contrast ratio (typical) 800 nits max bright"
+    },
+    {
+      "name": "iPhone 13",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone14,5"
+      ],
+      "width": 1170,
+      "height": 2532,
+      "longEdge": 2532,
+      "appleSpecUrl": "https://support.apple.com/kb/SP851",
+      "appleSpecTitle": "iPhone 13 - Tech Specs - Apple Support",
+      "appleSpecSha256": "73d2b5131f5237c922e22bb38cc1d63817cc023e12e35b1f20e548eecd011a31",
+      "displayQuote": ".14 ounces (174 grams) Display Super Retina XDR display 6.1‑inch (diagonal) all‑screen OLED display 2532‑by‑1170-pixel resolution at 460 ppi HDR display True Tone Wide color (P3) Haptic Touch 2,000,000:1 contrast ratio (typical) 800 nits max bright"
+    },
+    {
+      "name": "iPhone SE (3rd generation)",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone14,6"
+      ],
+      "width": 750,
+      "height": 1334,
+      "longEdge": 1334,
+      "appleSpecUrl": "https://support.apple.com/kb/SP867",
+      "appleSpecTitle": "iPhone SE (3rd generation) - Tech Specs - Apple Support",
+      "appleSpecSha256": "587a05bcef9ebb9be93ae26cd7e9026bf2ba6360c1df7030365d1c136f9ffb57",
+      "displayQuote": "isplay Retina HD display 4.7-inch (diagonal) widescreen LCD Multi‑Touch display with IPS technology 1334-by-750-pixel resolution at 326 ppi 1400:1 contrast ratio (typical) True Tone display Wide color display (P3) Haptic Touch 625 nits max brightn"
+    },
+    {
+      "name": "iPhone 14",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone14,7"
+      ],
+      "width": 1170,
+      "height": 2532,
+      "longEdge": 2532,
+      "appleSpecUrl": "https://support.apple.com/kb/SP873",
+      "appleSpecTitle": "iPhone 14 - Tech Specs - Apple Support",
+      "appleSpecSha256": "2f206879ef993d8fd566855cf60e7b6b28429ffbf66a0e8b4605b837cd9d0fc9",
+      "displayQuote": ".07 ounces (172 grams) Display Super Retina XDR display 6.1‑inch (diagonal) all‑screen OLED display 2532‑by‑1170-pixel resolution at 460 ppi HDR display True Tone Wide color (P3) Haptic Touch 2,000,000:1 contrast ratio (typical) 800 nits max bright"
+    },
+    {
+      "name": "iPhone 14 Plus",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone14,8"
+      ],
+      "width": 1284,
+      "height": 2778,
+      "longEdge": 2778,
+      "appleSpecUrl": "https://support.apple.com/kb/SP874",
+      "appleSpecTitle": "iPhone 14 Plus - Tech Specs - Apple Support",
+      "appleSpecSha256": "b475ad347bcd9b6030f5140e1fe0833ea957dd751c8df966cc2fddab98c697e1",
+      "displayQuote": ".16 ounces (203 grams) Display Super Retina XDR display 6.7‑inch (diagonal) all‑screen OLED display 2778‑by‑1284-pixel resolution at 458 ppi HDR display True Tone Wide color (P3) Haptic Touch 2,000,000:1 contrast ratio (typical) 800 nits max bright"
+    },
+    {
+      "name": "iPhone 14 Pro",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone15,2"
+      ],
+      "width": 1179,
+      "height": 2556,
+      "longEdge": 2556,
+      "appleSpecUrl": "https://support.apple.com/kb/SP875",
+      "appleSpecTitle": "iPhone 14 Pro - Technical Specifications - Apple Support",
+      "appleSpecSha256": "6a711e2ff69852a613d4f99d2400b65384613d9bc5e4233789d9f1ce8ccaed3a",
+      "displayQuote": ".27 ounces (206 grams) Display Super Retina XDR display 6.1‑inch (diagonal) all‑screen OLED display 2556‑by‑1179-pixel resolution at 460 ppi Dynamic Island Always-On display ProMotion technology with adaptive refresh rates up to 120Hz HDR display T"
+    },
+    {
+      "name": "iPhone 14 Pro Max",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone15,3"
+      ],
+      "width": 1290,
+      "height": 2796,
+      "longEdge": 2796,
+      "appleSpecUrl": "https://support.apple.com/kb/SP876",
+      "appleSpecTitle": "iPhone 14 Pro Max - Technical Specifications - Apple Support",
+      "appleSpecSha256": "67b6f72379ac4a2967a951ed1ef03f53861dd7d1ec61c2691c2dd07ec6d7b544",
+      "displayQuote": ".47 ounces (240 grams) Display Super Retina XDR display 6.7‑inch (diagonal) all‑screen OLED display 2796‑by‑1290-pixel resolution at 460 ppi Dynamic Island Always-On display ProMotion technology with adaptive refresh rates up to 120Hz HDR display T"
+    },
+    {
+      "name": "iPhone 15",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone15,4"
+      ],
+      "width": 1179,
+      "height": 2556,
+      "longEdge": 2556,
+      "appleSpecUrl": "https://support.apple.com/kb/SP901",
+      "appleSpecTitle": "iPhone 15 - Tech Specs - Apple Support",
+      "appleSpecSha256": "d48441d0f82143fe6adcad049440625b34e3c170e682813c489eac513ba1476f",
+      "displayQuote": ".02 ounces (171 grams) Display Super Retina XDR display 6.1‑inch (diagonal) all‑screen OLED display 2556‑by‑1179-pixel resolution at 460 ppi Dynamic Island HDR display True Tone Wide color (P3) Haptic Touch 2,000,000:1 contrast ratio (typical) 1000"
+    },
+    {
+      "name": "iPhone 15 Plus",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone15,5"
+      ],
+      "width": 1290,
+      "height": 2796,
+      "longEdge": 2796,
+      "appleSpecUrl": "https://support.apple.com/kb/SP902",
+      "appleSpecTitle": "iPhone 15 Plus - Tech Specs - Apple Support",
+      "appleSpecSha256": "e6191e7b45d155a6cef06a86897243a6138729b27cfdec70b79ef6b20809463e",
+      "displayQuote": ".09 ounces (201 grams) Display Super Retina XDR display 6.7‑inch (diagonal) all‑screen OLED display 2796‑by‑1290-pixel resolution at 460 ppi Dynamic Island HDR display True Tone Wide color (P3) Haptic Touch 2,000,000:1 contrast ratio (typical) 1000"
+    },
+    {
+      "name": "iPhone 15 Pro",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone16,1"
+      ],
+      "width": 1179,
+      "height": 2556,
+      "longEdge": 2556,
+      "appleSpecUrl": "https://support.apple.com/kb/SP903",
+      "appleSpecTitle": "iPhone 15 Pro - Tech Specs - Apple Support",
+      "appleSpecSha256": "5767231a6514e3ffde9860de43610378d7c588e0d302ab6ba5c12a49c0520385",
+      "displayQuote": ".60 ounces (187 grams) Display Super Retina XDR display 6.1‑inch (diagonal) all‑screen OLED display 2556‑by‑1179-pixel resolution at 460 ppi Dynamic Island Always-On display ProMotion technology with adaptive refresh rates up to 120Hz HDR display T"
+    },
+    {
+      "name": "iPhone 15 Pro Max",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone16,2"
+      ],
+      "width": 1290,
+      "height": 2796,
+      "longEdge": 2796,
+      "appleSpecUrl": "https://support.apple.com/kb/SP904",
+      "appleSpecTitle": "iPhone 15 Pro Max - Tech Specs - Apple Support",
+      "appleSpecSha256": "100cddfc709499d1c1379ee51ed8d47cef26f0524ebce842f9c1966bec5e5d5b",
+      "displayQuote": ".81 ounces (221 grams) Display Super Retina XDR display 6.7‑inch (diagonal) all‑screen OLED display 2796‑by‑1290-pixel resolution at 460 ppi Dynamic Island Always-On display ProMotion technology with adaptive refresh rates up to 120Hz HDR display T"
+    },
+    {
+      "name": "iPhone 16 Pro",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone17,1"
+      ],
+      "width": 1206,
+      "height": 2622,
+      "longEdge": 2622,
+      "appleSpecUrl": "https://support.apple.com/121031",
+      "appleSpecTitle": "iPhone 16 Pro - Tech Specs - Apple Support",
+      "appleSpecSha256": "45dec6951ebddfcd5ed3efd203b47fbd88239a0c88449d49f0c5e415c1dc25df",
+      "displayQuote": ".03 ounces (199 grams) Display Super Retina XDR display 6.3‑inch (diagonal) all‑screen OLED display 2622‑by‑1206-pixel resolution at 460 ppi Dynamic Island Always-On display ProMotion technology with adaptive refresh rates up to 120Hz HDR display T"
+    },
+    {
+      "name": "iPhone 16 Pro Max",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone17,2"
+      ],
+      "width": 1320,
+      "height": 2868,
+      "longEdge": 2868,
+      "appleSpecUrl": "https://support.apple.com/121032",
+      "appleSpecTitle": "iPhone 16 Pro Max - Tech Specs - Apple Support",
+      "appleSpecSha256": "8983be19ab6ca88e8f000c76d179cbfca436b9af7d1b799aef175851d3dd0001",
+      "displayQuote": ".99 ounces (227 grams) Display Super Retina XDR display 6.9‑inch (diagonal) all‑screen OLED display 2868‑by‑1320-pixel resolution at 460 ppi Dynamic Island Always-On display ProMotion technology with adaptive refresh rates up to 120Hz HDR display T"
+    },
+    {
+      "name": "iPhone 16",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone17,3"
+      ],
+      "width": 1179,
+      "height": 2556,
+      "longEdge": 2556,
+      "appleSpecUrl": "https://support.apple.com/121029",
+      "appleSpecTitle": "iPhone 16 - Tech Specs - Apple Support",
+      "appleSpecSha256": "936a8f5d4c3cc96b23eda9a659fb9637242c45a6f9958ceb7e71fa4b95b929cb",
+      "displayQuote": ".00 ounces (170 grams) Display Super Retina XDR display 6.1‑inch (diagonal) all‑screen OLED display 2556‑by‑1179-pixel resolution at 460 ppi Dynamic Island HDR display True Tone Wide color (P3) Haptic Touch 2,000,000:1 contrast ratio (typical) 1000"
+    },
+    {
+      "name": "iPhone 16 Plus",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone17,4"
+      ],
+      "width": 1290,
+      "height": 2796,
+      "longEdge": 2796,
+      "appleSpecUrl": "https://support.apple.com/121030",
+      "appleSpecTitle": "iPhone 16 Plus - Tech Specs - Apple Support",
+      "appleSpecSha256": "db1a7c71b5edd0f79bafd91ce73a9d3022dce40b9abce57877c77909d31fb178",
+      "displayQuote": ".03 ounces (199 grams) Display Super Retina XDR display 6.7‑inch (diagonal) all‑screen OLED display 2796‑by‑1290-pixel resolution at 460 ppi Dynamic Island HDR display True Tone Wide color (P3) Haptic Touch 2,000,000:1 contrast ratio (typical) 1000"
+    },
+    {
+      "name": "iPhone 16e",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone17,5"
+      ],
+      "width": 1170,
+      "height": 2532,
+      "longEdge": 2532,
+      "appleSpecUrl": "https://support.apple.com/122208",
+      "appleSpecTitle": "iPhone 16e - Tech Specs - Apple Support",
+      "appleSpecSha256": "5120ee3c3b0a51f0666e7be596602159195b41d4bbee70d3578d7614cfc17b10",
+      "displayQuote": ".88 ounces (167 grams) Display Super Retina XDR display 6.1‑inch (diagonal) all‑screen OLED display 2532‑by‑1170-pixel resolution at 460 ppi HDR display True Tone Wide color (P3) Haptic Touch 2,000,000:1 contrast ratio (typical) 800 nits max bright"
+    },
+    {
+      "name": "iPhone 17 Pro",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone18,1"
+      ],
+      "width": 1206,
+      "height": 2622,
+      "longEdge": 2622,
+      "appleSpecUrl": "https://support.apple.com/125090",
+      "appleSpecTitle": "iPhone 17 Pro - Tech Specs - Apple Support",
+      "appleSpecSha256": "ad7189685cb9b5cc72ab7346f42014c30e798755fed102e228d6e83c8687439b",
+      "displayQuote": ".27 ounces (206 grams) Display Super Retina XDR display 6.3‑inch (diagonal) all‑screen OLED display 2622‑by‑1206-pixel resolution at 460 ppi Dynamic Island Always-On display ProMotion technology with adaptive refresh rates up to 120Hz HDR display T"
+    },
+    {
+      "name": "iPhone 17 Pro Max",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone18,2"
+      ],
+      "width": 1320,
+      "height": 2868,
+      "longEdge": 2868,
+      "appleSpecUrl": "https://support.apple.com/125091",
+      "appleSpecTitle": "iPhone 17 Pro Max - Tech Specs - Apple Support",
+      "appleSpecSha256": "8fa0a4d42f1d5b89ba696c95e6dfe34b069309a7c6936b5735eecab7642aa5ee",
+      "displayQuote": ".22 ounces (233 grams) Display Super Retina XDR display 6.9‑inch (diagonal) all‑screen OLED display 2868‑by‑1320-pixel resolution at 460 ppi Dynamic Island Always-On display ProMotion technology with adaptive refresh rates up to 120Hz HDR display T"
+    },
+    {
+      "name": "iPhone 17",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone18,3"
+      ],
+      "width": 1206,
+      "height": 2622,
+      "longEdge": 2622,
+      "appleSpecUrl": "https://support.apple.com/125089",
+      "appleSpecTitle": "iPhone 17 - Tech Specs - Apple Support",
+      "appleSpecSha256": "63dd31f8b947a0f79f5e65779418015692f0bc13a2806f3174257ddcbfd90987",
+      "displayQuote": ".24 ounces (177 grams) Display Super Retina XDR display 6.3‑inch (diagonal) all‑screen OLED display 2622‑by‑1206-pixel resolution at 460 ppi Dynamic Island Always-On display ProMotion technology with adaptive refresh rates up to 120Hz HDR display T"
+    },
+    {
+      "name": "iPhone Air",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone18,4"
+      ],
+      "width": 1260,
+      "height": 2736,
+      "longEdge": 2736,
+      "appleSpecUrl": "https://support.apple.com/125092",
+      "appleSpecTitle": "iPhone Air - Tech Specs - Apple Support",
+      "appleSpecSha256": "44083193b56320e48f4e7715ceb29acb317d343d86e2ccd7f93842bd8d8c7328",
+      "displayQuote": ".82 ounces (165 grams) Display Super Retina XDR display 6.5‑inch (diagonal) all‑screen OLED display 2736‑by‑1260‑pixel resolution at 460 ppi Dynamic Island Always-On display ProMotion technology with adaptive refresh rates up to 120Hz HDR display T"
+    },
+    {
+      "name": "iPhone 17e",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone18,5"
+      ],
+      "width": 1170,
+      "height": 2532,
+      "longEdge": 2532,
+      "appleSpecUrl": "https://support.apple.com/126470",
+      "appleSpecTitle": "iPhone 17e - Tech Specs - Apple Support",
+      "appleSpecSha256": "cb44a2885d46bdc47734336f0b4a279bebc30a633560bdf0ecb61b5d50e23186",
+      "displayQuote": ".96 ounces (169 grams) Display Super Retina XDR display 6.1‑inch (diagonal) all‑screen OLED display 2532‑by‑1170-pixel resolution at 460 ppi HDR display True Tone Wide color (P3) Haptic Touch 2,000,000:1 contrast ratio (typical) 800 nits max bright"
+    },
+    {
+      "name": "iPhone 18 Pro",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone19,2"
+      ],
+      "width": 1206,
+      "height": 2622,
+      "longEdge": 2622,
+      "appleSpecUrl": "https://support.apple.com/en-us/148590",
+      "appleSpecTitle": "iPhone 18 Pro - Tech Specs - Apple Support",
+      "appleSpecSha256": "e6f899cb2b1f924c3ea5e733d5f928aec9c201fd8b57c946fb386267e43e2e8c",
+      "displayQuote": ".44 ounces (211 grams) Display Super Retina XDR display 6.3‑inch (diagonal) all‑screen OLED display 2622‑by‑1206-pixel resolution at 460 ppi Dynamic Island Always-On display ProMotion technology with adaptive refresh rates up to 120Hz HDR display T"
+    },
+    {
+      "name": "iPhone 18 Pro Max",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone19,3",
+        "iPhone19,7"
+      ],
+      "width": 1320,
+      "height": 2868,
+      "longEdge": 2868,
+      "appleSpecUrl": "https://support.apple.com/en-us/148591",
+      "appleSpecTitle": "iPhone 18 Pro Max - Tech Specs - Apple Support",
+      "appleSpecSha256": "0f2a7ba58522ca71ce5462738b5b5acb6987ef5b061b11b9a6b568b52b27ee92",
+      "displayQuote": ".78 ounces (249 grams) Display Super Retina XDR display 6.9‑inch (diagonal) all‑screen OLED display 2868‑by‑1320-pixel resolution at 460 ppi Dynamic Island Always-On display ProMotion technology with adaptive refresh rates up to 120Hz HDR display T"
+    },
+    {
+      "name": "iPhone 3GS",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone2,1"
+      ],
+      "width": 320,
+      "height": 480,
+      "longEdge": 480,
+      "appleSpecUrl": "https://support.apple.com/kb/SP565",
+      "appleSpecTitle": "iPhone 3GS - Technical Specifications - Apple Support",
+      "appleSpecSha256": "7bce872270d76615f007d9feef155426615c7a11ad91061c3d34030dec17edfb",
+      "displayQuote": ") Capacity 3 8GB flash drive Color Black Display 3.5-inch (diagonal) widescreen Multi-Touch display 480-by-320-pixel resolution at 163 ppi Fingerprint-resistant oleophobic coating Support for display of multiple languages and characters simultane"
+    },
+    {
+      "name": "iPhone 4",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone3,1",
+        "iPhone3,2",
+        "iPhone3,3"
+      ],
+      "width": 640,
+      "height": 960,
+      "longEdge": 960,
+      "appleSpecUrl": "https://support.apple.com/kb/SP587",
+      "appleSpecTitle": "iPhone 4 - Technical Specifications - Apple Support",
+      "appleSpecSha256": "2b02173e4d6b960f4939f29b8b02ea1a69c7358d9ecacbad27a2a7746ba15e58",
+      "displayQuote": " 16GB or 32GB flash drive Display Retina display 3.5-inch (diagonal) widescreen Multi-Touch display 960-by-640-pixel resolution at 326 ppi 800:1 contrast ratio (typical) 500 cd/m2 max brightness (typical) Fingerprint-resistant oleophobic coating "
+    },
+    {
+      "name": "iPhone 4s",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone4,1"
+      ],
+      "width": 640,
+      "height": 960,
+      "longEdge": 960,
+      "appleSpecUrl": "https://support.apple.com/kb/SP643",
+      "appleSpecTitle": "iPhone 4S - Technical Specifications - Apple Support",
+      "appleSpecSha256": "3e0028f41678bda298953b510757b51b9ad80e20643a952be3c76f2a4b9ddd0f",
+      "displayQuote": "al compass Wi-Fi Cellular Display Retina display 3.5-inch (diagonal) widescreen Multi-Touch display 960-by-640-pixel resolution at 326 ppi 800:1 contrast ratio (typical) 500 cd/m2 max brightness (typical) Fingerprint-resistant oleophobic coating "
+    },
+    {
+      "name": "iPhone 5",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone5,1",
+        "iPhone5,2"
+      ],
+      "width": 640,
+      "height": 1136,
+      "longEdge": 1136,
+      "appleSpecUrl": "https://support.apple.com/kb/SP655",
+      "appleSpecTitle": "iPhone 5 - Technical Specifications - Apple Support",
+      "appleSpecSha256": "fc0582c06771337ab78722416f04be5518005538cec4eca734fb769047b461d9",
+      "displayQuote": "ital compass Wi-Fi Cellular Display Retina display 4-inch (diagonal) widescreen Multi-Touch display 1136-by-640-pixel resolution at 326 ppi 800:1 contrast ratio (typical) 500 cd/m2 max brightness (typical) Fingerprint-resistant oleophobic coating "
+    },
+    {
+      "name": "iPhone 5c",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone5,3",
+        "iPhone5,4"
+      ],
+      "width": 640,
+      "height": 1136,
+      "longEdge": 1136,
+      "appleSpecUrl": "https://support.apple.com/kb/SP684",
+      "appleSpecTitle": "iPhone 5c - Technical Specifications - Apple Support",
+      "appleSpecSha256": "639baa69d41ebf4fe78f9b015c02421e2068409087e8e0934abbf8e2f8c1da7f",
+      "displayQuote": "ital compass Wi-Fi Cellular Display Retina display 4-inch (diagonal) widescreen Multi-Touch display 1136-by-640-pixel resolution at 326 ppi 800:1 contrast ratio (typical) 500 cd/m2 max brightness (typical) Fingerprint-resistant oleophobic coating "
+    },
+    {
+      "name": "iPhone 5s",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone6,1",
+        "iPhone6,2"
+      ],
+      "width": 640,
+      "height": 1136,
+      "longEdge": 1136,
+      "appleSpecUrl": "https://support.apple.com/kb/SP685",
+      "appleSpecTitle": "iPhone 5s - Technical Specifications - Apple Support",
+      "appleSpecSha256": "3621feaf6d6d3427e2d746a429836fb660dca4628ee74f9328859ee45dd2284f",
+      "displayQuote": "lay Retina display 4-inch (diagonal) LED-backlit widescreen Multi-Touch display with IPS technology 1136-by-640-pixel resolution at 326 ppi 800:1 contrast ratio (typical) 500 cd/m2 max brightness (typical) Full sRGB standard Fingerprint-resistant "
+    },
+    {
+      "name": "iPhone 6 Plus",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone7,1"
+      ],
+      "width": 1080,
+      "height": 1920,
+      "longEdge": 1920,
+      "appleSpecUrl": "https://support.apple.com/kb/SP706",
+      "appleSpecTitle": "iPhone 6 Plus - Technical Specifications - Apple Support",
+      "appleSpecSha256": "88d6dba0337411a8611d116fca7fc2cfd4f2448ad53d5896da61e16405361f4b",
+      "displayQuote": "etina HD display 5.5-inch (diagonal) LED-backlit widescreen Multi‑Touch display with IPS technology 1920-by-1080-pixel resolution at 401 ppi 1300:1 contrast ratio (typical) 500 cd/m2 max brightness (typical) Full sRGB standard Dual-domain pixels fo"
+    },
+    {
+      "name": "iPhone 6",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone7,2"
+      ],
+      "width": 750,
+      "height": 1334,
+      "longEdge": 1334,
+      "appleSpecUrl": "https://support.apple.com/kb/SP705",
+      "appleSpecTitle": "iPhone 6 - Technical Specifications - Apple Support",
+      "appleSpecSha256": "52343754730c15ebf26e1c187f255dcdbe3ef1d8a44bf5bdb96bef34326bd527",
+      "displayQuote": "etina HD display 4.7-inch (diagonal) LED-backlit widescreen Multi‑Touch display with IPS technology 1334-by-750-pixel resolution at 326 ppi 1400:1 contrast ratio (typical) 500 cd/m2 max brightness (typical) Full sRGB standard Dual-domain pixels fo"
+    },
+    {
+      "name": "iPhone 6s",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone8,1"
+      ],
+      "width": 750,
+      "height": 1334,
+      "longEdge": 1334,
+      "appleSpecUrl": "https://support.apple.com/kb/SP726",
+      "appleSpecTitle": "iPhone 6s - Technical Specifications - Apple Support",
+      "appleSpecSha256": "8529a4f8e10ba39b05319591adc5683b53adb5bc1da221d1f03d3823fb94aa5c",
+      "displayQuote": "HD display with 3D Touch 4.7-inch (diagonal) widescreen LCD Multi-Touch display with IPS technology 1334-by-750-pixel resolution at 326 ppi 1400:1 contrast ratio (typical) 500 cd/m2 max brightness (typical) Full sRGB standard Dual-domain pixels fo"
+    },
+    {
+      "name": "iPhone 6s Plus",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone8,2"
+      ],
+      "width": 1080,
+      "height": 1920,
+      "longEdge": 1920,
+      "appleSpecUrl": "https://support.apple.com/kb/SP727",
+      "appleSpecTitle": "iPhone 6s Plus - Technical Specifications - Apple Support",
+      "appleSpecSha256": "526ad5e123e6f403c0bdfd149043cc6b1c9e2ab2a0080be3cb896e2c3cc41ed1",
+      "displayQuote": "HD display with 3D Touch 5.5-inch (diagonal) widescreen LCD Multi-Touch display with IPS technology 1920-by-1080-pixel resolution at 401 ppi 1300:1 contrast ratio (typical) 500 cd/m2 max brightness (typical) Full sRGB standard Dual-domain pixels fo"
+    },
+    {
+      "name": "iPhone SE",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone8,4"
+      ],
+      "width": 640,
+      "height": 1136,
+      "longEdge": 1136,
+      "appleSpecUrl": "https://support.apple.com/kb/SP738",
+      "appleSpecTitle": "iPhone SE - Technical Specifications - Apple Support",
+      "appleSpecSha256": "ce69575719df7b45df273d9d4c47accb9f9bdefae919246df38d852c782e05d1",
+      "displayQuote": "ms) Display Retina display 4-inch (diagonal) widescreen LCD Multi-Touch display with IPS technology 1136‑by‑640‑pixel resolution at 326 ppi 800:1 contrast ratio (typical) Full sRGB standard 500 cd/m2 max brightness (typical) Fingerprint‑resistant "
+    },
+    {
+      "name": "iPhone 7",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone9,1",
+        "iPhone9,3"
+      ],
+      "width": 750,
+      "height": 1334,
+      "longEdge": 1334,
+      "appleSpecUrl": "https://support.apple.com/kb/SP743",
+      "appleSpecTitle": "iPhone 7 - Technical Specifications - Apple Support",
+      "appleSpecSha256": "945ac38944b3bfddc5665b8f4e286103f42daaba9debf529741fb474896858a5",
+      "displayQuote": "isplay Retina HD display 4.7-inch (diagonal) widescreen LCD Multi-Touch display with IPS technology 1334-by-750-pixel resolution at 326 ppi 1400:1 contrast ratio (typical) Wide color display (P3) 625 cd/m2 max brightness (typical) Dual-domain pixe"
+    },
+    {
+      "name": "iPhone 7 Plus",
+      "family": "iPhone",
+      "identifiers": [
+        "iPhone9,2",
+        "iPhone9,4"
+      ],
+      "width": 1080,
+      "height": 1920,
+      "longEdge": 1920,
+      "appleSpecUrl": "https://support.apple.com/kb/SP744",
+      "appleSpecTitle": "iPhone 7 Plus - Technical Specifications - Apple Support",
+      "appleSpecSha256": "a4eb68f9ac33abc7f887d7e374a4de8d002127cf3dac388d185bd50e747b6c87",
+      "displayQuote": "isplay Retina HD display 5.5-inch (diagonal) widescreen LCD Multi-Touch display with IPS technology 1920-by-1080-pixel resolution at 401 ppi 1300:1 contrast ratio (typical) Wide color display (P3) 625 cd/m2 max brightness (typical) Dual-domain pixe"
+    }
+  ]
+}

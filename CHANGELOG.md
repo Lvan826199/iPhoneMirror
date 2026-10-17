@@ -7,6 +7,13 @@ All notable changes to iPhoneMirror are documented here. The project follows
 
 ### Fixed
 
+- Apply wired HID lease refresh and inline recovery to media-authenticated
+  sessions used by Cryptex. Preserve the media gate and capture tunnel, defer
+  proactive refresh while input is held, and close replacement HID connections
+  before media-session teardown.
+- Require media data before reporting media-authenticated control ready. Detect
+  receiver failures and stalled streams even when HID still answers PING, stop
+  input, and rebuild media authentication and HID while retaining the capture mux.
 - Retry the existing Personalized DDI preparation on iOS 27 when Cryptex
   preparation rejects the image or cannot provide its service. Keep the original
   preparation deadline and failure diagnostics, and preserve existing images.

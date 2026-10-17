@@ -14,7 +14,25 @@ public partial class MainWindow
     private TrayPanelWindow? _trayPanel;
     private ProjectionSettingsWindow? _traySettingsWindow;
     private bool _startupServicesStarted;
+    private bool _exitRequested;
     internal bool IsTrayMode => _viewModel.IsTrayApplicationMode || (Application.Current as App)?.AutomationBackground == true;
+
+    internal void ExitApplication()
+    {
+        _exitRequested = true;
+        try { Close(); }
+        finally { _exitRequested = false; }
+    }
+
+    private bool TryCloseMainWindowToTray()
+    {
+        if (_exitRequested || !_viewModel.CloseMainWindowToTray ||
+            (Application.Current as App)?.IsSystemSessionEnding == true) return false;
+        if (_viewModel.CanRestoreMainWindowFromTray) return true;
+        if (IsTrayMode) return false;
+        _viewModel.EnterTrayOnMainWindowClose();
+        return true;
+    }
 
     internal void StartInTray()
     {
@@ -57,13 +75,14 @@ public partial class MainWindow
         {
             _trayIcon = new TrayIconService(ShowTrayPanel);
             _trayPanel = new TrayPanelWindow(_viewModel, StartTrayProjectionAsync,
-                ShowTraySettings, () => Close());
+                ShowTraySettings, ExitApplication);
         }
         catch (Exception error)
         {
             DisposeTray();
             if ((Application.Current as App)?.AutomationBackground == true) return;
-            _viewModel.SelectedApplicationDisplayMode = ApplicationDisplayMode.Complete;
+            if (_viewModel.CanRestoreMainWindowFromTray) _viewModel.RestoreMainWindowFromTray();
+            else _viewModel.SelectedApplicationDisplayMode = ApplicationDisplayMode.Complete;
             ShowInTaskbar = true;
             Show();
             AppPromptWindow.Inform(LocalizationService.Get("ApplicationModeTray"),

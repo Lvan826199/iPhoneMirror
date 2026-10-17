@@ -110,11 +110,16 @@ std::vector<std::uint8_t> make_hpd1(const SessionOptions& options) {
         {"Width", number_f64(options.requested_width)},
         {"Height", number_f64(options.requested_height)},
     });
-    return async_dict(fourcc('h', 'p', 'd', '1'), EmptyClockRef, dictionary({
+    auto entries = std::vector<Entry>{
         {"Valeria", boolean_value(options.demo_mode)},
         {"HEVCDecoderSupports444", boolean_value(options.advertise_hevc_444)},
         {"DisplaySize", std::move(display_size)},
-    }));
+    };
+    if (options.native_airplay) {
+        entries.emplace_back("Stevenote", boolean_value(true));
+        entries.emplace_back("H264DecoderSupports444", boolean_value(true));
+    }
+    return async_dict(fourcc('h', 'p', 'd', '1'), EmptyClockRef, dictionary(std::move(entries)));
 }
 
 std::vector<std::uint8_t> default_audio_descriptor() {

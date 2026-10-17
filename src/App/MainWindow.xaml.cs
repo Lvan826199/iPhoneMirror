@@ -2542,8 +2542,10 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         if (_allowClose) return;
         e.Cancel = true;
         if (_shutdownStarted) return;
+        if (TryCloseMainWindowToTray()) return;
+        Action resumeClose = _exitRequested ? ExitApplication : Close;
         if (Application.Current is not App { IsSystemSessionEnding: true } &&
-            _mappingWindow?.TryCloseEditor(Close) == false) return;
+            _mappingWindow?.TryCloseEditor(resumeClose) == false) return;
         _shutdownStarted = true;
         await ShutdownAutomationAsync();
         DisposeKeyboardInputSubscriptions();

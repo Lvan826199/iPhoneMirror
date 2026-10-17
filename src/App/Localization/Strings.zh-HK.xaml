@@ -204,6 +204,9 @@
     <system:String x:Key="IndependentWindowProjectionSettings">螢幕鏡像設定</system:String>
     <system:String x:Key="ProjectionSettingsTitle">螢幕鏡像設定</system:String>
     <system:String x:Key="ApplicationModeLabel">應用模式</system:String>
+    <system:String x:Key="CloseMainWindowToTray">關閉主視窗時進入系統匣模式</system:String>
+    <system:String x:Key="CloseMainWindowToTrayHint">保留投影及獨立視窗，可從系統匣還原主視窗或結束應用程式。</system:String>
+    <system:String x:Key="TrayRestoreMainWindow">還原主視窗</system:String>
     <system:String x:Key="ApplicationModeLightweight">輕量模式</system:String>
     <system:String x:Key="ApplyLightweightMode">一鍵切換輕量模式</system:String>
     <system:String x:Key="ApplicationModeComplete">完整模式</system:String>
@@ -557,7 +560,7 @@
     <system:String x:Key="UsbModeDemoAdvantage">發送 Valeria=true 和裝置原始 DisplaySize，由 iOS 輸出完整的手機鏡像，並保持固定示範狀態。相容性和畫面完整性最高，推薦日常使用。</system:String>
     <system:String x:Key="UsbModeDemoDisadvantage">iOS 會進入 Apple 示範狀態，狀態列日期、時間和電量會鎖定為示範值，不能反映手機目前狀態。</system:String>
     <system:String x:Key="UsbModeDemoNotice">此模式不會啟用影片 App 的 AirPlay 或外接播放畫面。</system:String>
-    <system:String x:Key="UsbModeAirPlayAdvantage">發送 Valeria=false，使用裝置原始尺寸，並保留現有的首幀偵測、橫直螢幕辨識和自動調整。影片 App 可以切換到 AirPlay 或外接播放。</system:String>
+    <system:String x:Key="UsbModeAirPlayAdvantage">保留真實狀態列。iPad 使用橫直向對稱的顯示能力，避免方向變化時重新啟動 USB；實際來源解像度由裝置決定，可能低於面板原生像素。影片 App 可以嘗試外接播放。</system:String>
     <system:String x:Key="UsbModeAirPlayDisadvantage">外接內容的解像度無法保證與手機和視窗完美自適應，可能出現裁切、比例異常或畫面顯示不全。</system:String>
     <system:String x:Key="UsbModeAirPlayNotice">需要自訂時，連續按右下角版本號 5 次開啟進階模式。自訂 HPD1 尺寸存在風險，錯誤參數可能導致黑畫面、裁切或 USB 重新連接失敗。</system:String>
     <system:String x:Key="UsbModeAisiAdvantage">採用愛思同類方案，發送 Valeria=false 並固定請求 1565×1565，減少不同裝置之間的解像度協商差異。</system:String>
@@ -633,6 +636,9 @@
     <system:String x:Key="WirelessResolutionLabel">連接解像度</system:String>
     <system:String x:Key="WirelessResolutionHelp">套用後將重新宣告 AirPlay 接收能力；弱網請選擇 720p 或 540p。</system:String>
     <system:String x:Key="WirelessProfileMaximum">原畫（橫直向最長邊 2880 · 60 fps）</system:String>
+    <system:String x:Key="WirelessProfileMaximumIpad">原畫（iPad / Air · 最長邊 2360 · 60 fps）</system:String>
+    <system:String x:Key="WirelessProfileMaximumIpadPro">原畫（iPad Pro 12.9 · 最長邊 2732 · 60 fps）</system:String>
+    <system:String x:Key="WirelessProfileNativeDimensions">原畫（{0} · {1}×{2} · 自動橫直向）</system:String>
     <system:String x:Key="WirelessProfile1080p">1080p（推薦 · 60 fps）</system:String>
     <system:String x:Key="WirelessProfile720p">720p（流暢 · 30 fps）</system:String>
     <system:String x:Key="WirelessProfile540p">540p（弱網 · 30 fps）</system:String>

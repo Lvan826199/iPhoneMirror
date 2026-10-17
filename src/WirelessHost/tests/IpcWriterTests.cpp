@@ -154,6 +154,15 @@ void test_latest_pending_frame_per_device() {
 
 int main() {
     try {
+        require(iPhoneMirror::host_common::supported_capability(2880, 2880, 60) &&
+            iPhoneMirror::host_common::supported_capability(2360, 2360, 60) &&
+            iPhoneMirror::host_common::supported_capability(2732, 2732, 60) &&
+            !iPhoneMirror::host_common::supported_capability(3840, 3840, 60),
+            "iPad original capability is accepted separately from the verified iPhone envelope");
+        for (const auto& display : iPhoneMirror::devices::AppleDisplays)
+            require(iPhoneMirror::host_common::supported_capability(display.height, display.height, 60) &&
+                !iPhoneMirror::host_common::supported_capability(display.height, display.height, 61),
+                "every catalog long edge has a symmetric, bounded receiver capability");
         using namespace iPhoneMirror::wireless;
         const auto pause = parse_mirror_event("IPHONE_MIRROR_VIDEO_STATE\tdevice-a\t1");
         require(pause && pause->type == MessageType::MirrorState && pause->reserved == 1,

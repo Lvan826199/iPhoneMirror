@@ -12,9 +12,11 @@ set(IPHONEMIRROR_CORE_SOURCES
     src/Device/AppleUsbDiscovery.cpp
     src/Device/DeviceManager.cpp
     src/Capture/CaptureSession.cpp
+    src/Capture/UsbOrientationMonitor.cpp
     src/Capture/WirelessReceiverHub.cpp
     src/Capture/WirelessCaptureSession.cpp
     src/Media/H264.cpp
+    src/Media/BundledH264Decoder.cpp
     src/Media/CoreMedia.cpp
     src/Media/MediaFoundationDecoder.cpp
     src/Audio/WasapiRenderer.cpp
@@ -77,6 +79,16 @@ add_custom_command(TARGET iPhoneMirror.Core POST_BUILD
         $<TARGET_FILE_DIR:iPhoneMirror.Core>/libusb-1.0.dll
 )
 
+# B-mode native AVC 4:4:4 uses the same pinned LGPL decoder as AirPlay.
+# Keep it optional at runtime; negotiation advertises 4:4:4 only when present.
+foreach(library avcodec-58.dll avutil-56.dll)
+    add_custom_command(TARGET iPhoneMirror.Core POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:iPhoneMirror.Core>/Wireless
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${PROJECT_SOURCE_DIR}/third_party/airplay-server/bin/x64/${library}
+            $<TARGET_FILE_DIR:iPhoneMirror.Core>/Wireless/${library})
+endforeach()
+
 set_target_properties(iPhoneMirror.Core PROPERTIES
     OUTPUT_NAME "iPhoneMirror.Core"
     WINDOWS_EXPORT_ALL_SYMBOLS OFF
@@ -114,6 +126,7 @@ if(IPHONEMIRROR_BUILD_TESTS)
         src/Protocol/QuickTimePacket.cpp
         src/Protocol/QuickTimeSession.cpp
         src/Media/H264.cpp
+        src/Media/BundledH264Decoder.cpp
         src/Media/CoreMedia.cpp
         src/Media/MediaFoundationDecoder.cpp
         src/Audio/WasapiRenderer.cpp
@@ -123,6 +136,7 @@ if(IPHONEMIRROR_BUILD_TESTS)
         src/Transport/LibUsb0Transport.cpp
         src/Device/AppleUsbDiscovery.cpp
         src/Capture/CaptureSession.cpp
+        src/Capture/UsbOrientationMonitor.cpp
         src/Capture/WirelessReceiverHub.cpp
         src/Capture/WirelessCaptureSession.cpp
         src/Logging.cpp

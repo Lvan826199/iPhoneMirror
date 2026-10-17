@@ -144,7 +144,8 @@ public partial class App : Application
         {
             if (Interlocked.Exchange(ref _remoteShutdownRequested, 1) != 0) return;
             DiagnosticLogger.Info("lifecycle", "remote_shutdown_requested");
-            if (MainWindow is { } window) window.Close();
+            if (MainWindow is MainWindow main) main.ExitApplication();
+            else if (MainWindow is { } window) window.Close();
             else Shutdown(0);
         });
     }

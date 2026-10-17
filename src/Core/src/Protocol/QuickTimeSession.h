@@ -22,10 +22,9 @@ enum class SessionState {
 };
 
 struct SessionOptions {
-    // Valeria=false makes iOS honor DisplaySize. The protocol selects an
-    // encoder tier from the requested long edge; an arbitrary huge square can
-    // fall back to 1440p. 1206x2622 is the highest tier verified on both test
-    // devices; broader 4K bounds make recent iOS choose a lower encoder tier.
+    // DisplaySize describes the receiver, not a guaranteed encoder size.
+    // The ordinary non-Valeria path can select a reduced AirPlay tier even
+    // for a panel-sized request; native_airplay enables the native iPad path.
     std::uint32_t requested_width{1206};
     std::uint32_t requested_height{2622};
     bool request_native_display_size{false};
@@ -40,6 +39,11 @@ struct SessionOptions {
     bool demo_mode{false};
     bool request_audio{true};
     bool advertise_hevc_444{false};
+    // Stevenote selects a presentation display without Valeria's status-bar
+    // override. Its AVC stream requires a real High 4:4:4 decoder; negotiate
+    // it only with that decoder AND a live system-direction monitor. Native
+    // sample attachments keep orientation zero even while content rotates.
+    bool native_airplay{false};
 };
 
 struct SessionEvent {
@@ -61,6 +65,7 @@ public:
         std::uint32_t width, std::uint32_t height);
     [[nodiscard]] std::vector<std::vector<std::uint8_t>> complete_display_reconfigure();
     void set_demo_mode(bool enabled) noexcept { options_.demo_mode = enabled; }
+    void set_native_airplay(bool enabled) noexcept { options_.native_airplay = enabled; }
     void reset();
 
     [[nodiscard]] SessionState state() const noexcept { return state_; }

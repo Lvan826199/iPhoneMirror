@@ -32,6 +32,7 @@ internal sealed class UpdateSettings
     public AppTheme Theme { get; set; } = AppTheme.System;
     public ApplicationDisplayMode ApplicationDisplayMode { get; set; } =
         ApplicationDisplayMode.Complete;
+    public bool CloseMainWindowToTray { get; set; }
     public WirelessReceiverBackend WirelessReceiverBackend { get; set; } =
         WirelessReceiverBackend.Original;
     public string WirelessDisplayProfileId { get; set; } = "1080p";
@@ -113,6 +114,7 @@ internal sealed class UpdateSettings
         NotifyPrereleaseReleases = NotifyPrereleaseReleases,
         Theme = Theme,
         ApplicationDisplayMode = ApplicationDisplayMode,
+        CloseMainWindowToTray = CloseMainWindowToTray,
         WirelessReceiverBackend = WirelessReceiverBackend,
         WirelessDisplayProfileId = WirelessDisplayProfileId,
         WirelessReceiverName = WirelessReceiverName,

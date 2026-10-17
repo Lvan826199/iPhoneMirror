@@ -5,6 +5,7 @@
 // translation units without violating the one-definition rule.
 
 #pragma once
+#include "../Shared/Devices/AppleDisplayCatalog.generated.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -46,7 +47,10 @@ namespace iPhoneMirror::host_common {
         return (width == long_edge && height == short_edge) ||
             (width == short_edge && height == long_edge);
     };
-    return (matches(2880, 2880) && fps == 60) ||
+    return (width == height && iPhoneMirror::devices::is_apple_display_long_edge(width) && fps == 60) ||
+        (matches(2880, 2880) && fps == 60) ||
+        (matches(2360, 2360) && fps == 60) ||
+        (matches(2732, 2732) && fps == 60) ||
         (matches(5120, 2880) && fps == 60) ||
         (matches(1920, 1080) && fps == 60) ||
         (matches(1280, 720) && fps == 30) ||

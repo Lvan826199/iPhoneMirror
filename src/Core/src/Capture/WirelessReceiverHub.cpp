@@ -301,6 +301,9 @@ void WirelessClientStream::set_metadata(
     std::scoped_lock lock(mutex_);
     if (!product_type.empty()) product_type_ = std::move(product_type);
     if (!os_version.empty()) os_version_ = std::move(os_version);
+    if (const auto* display = devices::find_apple_display(product_type_))
+        logging::write(std::format("wireless_display_catalog model={} panel={}x{} long_edge={}",
+            narrow(product_type_), display->width, display->height, display->height));
 }
 
 void WirelessClientStream::set_mirror_state(wireless::MirrorSenderState state) {
@@ -491,6 +494,16 @@ void WirelessClientStream::publish_video(const wireless::MessageHeader& header,
         received_at - started_at_).count() / 100;
     const bool format_changed = snapshot_.width != 0 && snapshot_.height != 0 &&
         (snapshot_.width != header.width || snapshot_.height != header.height);
+    if (snapshot_.video_frames == 0 || format_changed) {
+        const auto* display = devices::find_apple_display(product_type_);
+        const bool panel_pixels = display &&
+            ((display->width == header.width && display->height == header.height) ||
+             (display->width == header.height && display->height == header.width));
+        logging::write(std::format(
+            "wireless_resolution model={} panel={}x{} decoded={}x{} panel_pixels={} orientation={}",
+            narrow(product_type_), display ? display->width : 0, display ? display->height : 0,
+            header.width, header.height, panel_pixels, header.width > header.height ? "landscape" : "portrait"));
+    }
     if (format_changed) {
         // Replace the retained frame atomically below, so all previews see
         // the new orientation without draining frames with old geometry.

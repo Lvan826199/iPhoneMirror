@@ -36,14 +36,18 @@ internal sealed class WirelessReceiverRuntime(
 }
 
 internal sealed class WirelessDisplayProfile(
-    string id, string resourceKey, uint width, uint height, uint frameRate) :
+    string id, string resourceKey, uint width, uint height, uint frameRate,
+    AppleDisplaySpecification? nativeDisplay = null) :
     INotifyPropertyChanged
 {
     internal string Id { get; } = id;
     internal uint Width { get; } = width;
     internal uint Height { get; } = height;
     internal uint FrameRate { get; } = frameRate;
-    public string Label => LocalizationService.Get(resourceKey);
+    internal AppleDisplaySpecification? NativeDisplay { get; } = nativeDisplay;
+    public string Label => NativeDisplay is { } display
+        ? LocalizationService.Format(resourceKey, display.Family, display.Width, display.Height)
+        : LocalizationService.Get(resourceKey);
     public override string ToString() => Label;
     internal void NotifyLanguageChanged() => PropertyChanged?.Invoke(this,
         new PropertyChangedEventArgs(nameof(Label)));
@@ -106,15 +110,39 @@ internal static class WirelessReceiverConfiguration
         new(WirelessReceiverBackend.Original, "WirelessBackendOriginal"),
         new(WirelessReceiverBackend.UxPlay, "WirelessBackendUxPlay"),
     ];
-    internal static IReadOnlyList<WirelessDisplayProfile> DisplayProfiles { get; } =
-    [
-        // Preserve the 2880-pixel long edge in either orientation. An asymmetric
-        // 5120x2880 display makes iOS request a 5K-wide encoder when rotating.
-        new("maximum", "WirelessProfileMaximum", 2880, 2880, 60),
-        new("1080p", "WirelessProfile1080p", 1920, 1080, 60),
-        new("720p", "WirelessProfile720p", 1280, 720, 30),
-        new("540p", "WirelessProfile540p", 960, 540, 30),
-    ];
+    internal static IReadOnlyList<WirelessDisplayProfile> DisplayProfiles { get; } = CreateDisplayProfiles();
+
+    private static IReadOnlyList<WirelessDisplayProfile> CreateDisplayProfiles()
+    {
+        var profiles = new List<WirelessDisplayProfile>
+        {
+            // Preserve saved IDs and the verified iPhone envelope.
+            new("maximum", "WirelessProfileMaximum", 2880, 2880, 60),
+            new("1080p", "WirelessProfile1080p", 1920, 1080, 60),
+            new("720p", "WirelessProfile720p", 1280, 720, 30),
+            new("540p", "WirelessProfile540p", 960, 540, 30),
+            new("maximum-ipad", "WirelessProfileMaximumIpad", 2360, 2360, 60),
+            new("maximum-ipad-pro", "WirelessProfileMaximumIpadPro", 2732, 2732, 60),
+        };
+        // Retain saved profile IDs and their ordering. Add every remaining
+        // physical display group as a long-edge square, so selecting native
+        // pixels never makes a receiver capability depend on orientation.
+        foreach (var display in AppleDisplayCatalog.Products
+            .GroupBy(product => product.LongEdge).OrderBy(group => group.Key)
+            .Select(group => group.First()))
+        {
+            if (profiles.Any(profile => profile.Width == display.LongEdge && profile.Height == display.LongEdge))
+                continue;
+            profiles.Add(new($"native-{display.LongEdge}", "WirelessProfileNativeDimensions",
+                display.LongEdge, display.LongEdge, 60, display));
+        }
+        return profiles.AsReadOnly();
+    }
+
+    internal static WirelessDisplayProfile? NativeProfileFor(string productType) =>
+        AppleDisplayCatalog.Find(productType) is { } display
+            ? DisplayProfiles.First(profile => profile.Width == display.LongEdge && profile.Height == display.LongEdge)
+            : null;
     internal static WirelessDisplayProfile DefaultDisplayProfile => DisplayProfiles[1];
 
     internal static WirelessReceiverBackend NormalizeBackend(
@@ -138,7 +166,7 @@ internal static class WirelessReceiverConfiguration
         NormalizeBackend(backend) == WirelessReceiverBackend.Original;
 
     internal static bool RequiresOriginalQualityWarning(WirelessDisplayProfile profile) =>
-        string.Equals(profile.Id, "maximum", StringComparison.Ordinal);
+        profile.Id is "maximum" or "maximum-ipad" or "maximum-ipad-pro" || profile.NativeDisplay is not null;
 
     internal static bool IsSupportedDisplayProfile(uint width, uint height, uint frameRate) =>
         DisplayProfiles.Any(profile => profile.Width == width && profile.Height == height &&

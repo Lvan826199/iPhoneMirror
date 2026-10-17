@@ -78,8 +78,9 @@ internal static partial class Program
                     $"Returning from {mode} to tray failed.");
             }
             TestTrayStartupUpdates(app, main, vm);
+            TestCloseMainWindowToTray(app, main, output);
             InteractionAssert(trace.Messages.Count == 0, string.Join(Environment.NewLine, trace.Messages));
-            Console.WriteLine("Tray tests passed: hidden startup, shell panel reopening, Escape, focus loss, busy/error handling, audio settings, media stop notification, startup updates, mode switching, settings persistence, and 3 languages × 2 themes.");
+            Console.WriteLine("Tray tests passed: hidden startup, shell panel reopening, Escape, focus loss, busy/error handling, audio settings, media stop notification, startup updates, mode switching, close to tray and restore, settings persistence, and 4 languages × 2 themes.");
             return 0;
         }
         finally

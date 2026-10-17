@@ -145,6 +145,9 @@ namespace detail {
 // Materializes a shared hardware frame for CPU-only API consumers. This is
 // intentionally lazy so the normal D3D preview path remains GPU-only.
 [[nodiscard]] bool materialize_gpu_frame(DecodedFrame& frame) noexcept;
+// Reorient decoded pixels, including UV pairs, so every consumer observes the
+// same dimensions. Never resizes or alters the compressed decoder format.
+[[nodiscard]] bool rotate_decoded_frame(DecodedFrame& frame, unsigned clockwise_turns);
 
 } // namespace detail
 

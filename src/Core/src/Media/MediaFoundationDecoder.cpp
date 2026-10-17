@@ -1,4 +1,5 @@
 #include "Media/MediaFoundationDecoder.h"
+#include "Media/BundledH264Decoder.h"
 
 #include "../Logging.h"
 
@@ -403,6 +404,48 @@ std::string_view color_range_name(coremedia::ColorRange value) noexcept {
 }
 
 namespace detail {
+
+bool rotate_decoded_frame(DecodedFrame& frame, unsigned clockwise_turns) {
+    const auto turns = clockwise_turns % 4U;
+    if (!turns) return true;
+    if (frame.nv12.empty() && frame.gpu_frame && !materialize_gpu_frame(frame)) return false;
+    if (!frame.width || !frame.height || frame.stride <= 0)
+        return false;
+    const std::size_t component = frame.pixel_format == PixelFormat::P010 ? 2 : 1;
+    const auto stride = static_cast<std::size_t>(frame.stride);
+    const auto y_bytes = stride * frame.height;
+    if (stride < ((static_cast<std::size_t>(frame.width) + 1U) & ~1ULL) * component ||
+        frame.nv12.size() < y_bytes + stride * ((static_cast<std::size_t>(frame.height) + 1U) / 2U))
+        return false;
+    const auto width = (turns & 1U) ? frame.height : frame.width;
+    const auto height = (turns & 1U) ? frame.width : frame.height;
+    const auto bytes = checked_video_buffer_size(width, height, frame.pixel_format);
+    if (!bytes) return false;
+    const auto output_stride = ((static_cast<std::size_t>(width) + 1U) & ~1ULL) * component;
+    std::vector<std::uint8_t> pixels(*bytes);
+    const auto rotate_plane = [turns](const std::uint8_t* source, std::uint8_t* target,
+        std::uint32_t columns, std::uint32_t rows, std::size_t source_stride,
+        std::size_t target_stride, std::size_t sample_bytes) {
+        for (std::uint32_t y = 0; y < rows; ++y) {
+            for (std::uint32_t x = 0; x < columns; ++x) {
+                const auto dx = turns == 1 ? rows - 1 - y : turns == 2 ? columns - 1 - x : y;
+                const auto dy = turns == 1 ? x : turns == 2 ? rows - 1 - y : columns - 1 - x;
+                std::memcpy(target + dy * target_stride + dx * sample_bytes,
+                    source + y * source_stride + x * sample_bytes, sample_bytes);
+            }
+        }
+    };
+    rotate_plane(frame.nv12.data(), pixels.data(), frame.width, frame.height, stride,
+        output_stride, component);
+    rotate_plane(frame.nv12.data() + y_bytes, pixels.data() + output_stride * height,
+        (frame.width + 1U) / 2U, (frame.height + 1U) / 2U, stride, output_stride, component * 2U);
+    frame.width = width;
+    frame.height = height;
+    frame.stride = static_cast<std::int32_t>(output_stride);
+    frame.nv12 = std::move(pixels);
+    frame.gpu_frame.reset();
+    return true;
+}
 
 std::optional<std::uint32_t> checked_video_buffer_size(
     std::uint32_t width, std::uint32_t height, PixelFormat format) noexcept {
@@ -1006,6 +1049,7 @@ DecodedFrame::SharedGpuFrame::~SharedGpuFrame() {
 
 struct MediaFoundationVideoDecoder::Impl {
     DecoderPreference preference{DecoderPreference::Auto};
+    std::unique_ptr<BundledH264Decoder> software_444;
     ComPtr<IMFTransform> transform;
     ComPtr<IMFMediaType> output_type;
     ComPtr<IMFMediaEventGenerator> event_generator;
@@ -1350,6 +1394,20 @@ struct MediaFoundationVideoDecoder::Impl {
         format = value;
         fps_numerator = numerator;
         fps_denominator = denominator;
+        software_444.reset();
+        if (format.video_codec() == coremedia::VideoCodec::H264 && format.chroma_format == 3) {
+            reset_transform();
+            software_444 = std::make_unique<BundledH264Decoder>(format);
+            selected_name = "FFmpeg H264 High 4:4:4 decoder";
+            actual_acceleration = detail::DecoderAcceleration::Software;
+            selected_hardware = false;
+            output_format = PixelFormat::Nv12;
+            configured = true;
+            waiting_for_random_access = false;
+            logging::write(std::format("video_decoder selected=ffmpeg_h264_444 size={}x{} runtime=software",
+                format.width, format.height));
+            return;
+        }
         candidates = decoder_candidates(format.video_codec(), preference);
         if (candidates.empty()) throw std::runtime_error("no Media Foundation video decoder is installed");
         waiting_for_random_access = false;
@@ -1817,6 +1875,7 @@ struct MediaFoundationVideoDecoder::Impl {
 
     std::vector<DecodedFrame> drain() {
         if (!configured) return {};
+        if (software_444) return software_444->drain();
         check(transform->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0),
             "end decoder stream");
         check(transform->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0),
@@ -1839,6 +1898,11 @@ struct MediaFoundationVideoDecoder::Impl {
     }
 
     void flush() {
+        if (software_444) {
+            software_444->flush();
+            waiting_for_random_access = true;
+            return;
+        }
         if (!transform) return;
         (void)transform->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0);
         pending_input_requests = 0;
@@ -1861,6 +1925,7 @@ struct MediaFoundationVideoDecoder::Impl {
         const bool random_access = detail::is_random_access_sample(format, sample);
         if (waiting_for_random_access && !random_access) return {};
         if (random_access) waiting_for_random_access = false;
+        if (software_444) return software_444->decode(sample, timestamp);
         try {
             return decode_once(sample, timestamp, duration, random_access);
         } catch (const std::exception& error) {

@@ -90,6 +90,6 @@ public partial class MainWindow
         if (!_compactPreviewActive || _secondaryMirrors.HasAnyOpen) return;
         _compactPreviewActive = false;
         // Let the native close handler finish before the ordinary async shutdown.
-        Dispatcher.BeginInvoke(() => Close());
+        Dispatcher.BeginInvoke(ExitApplication);
     }
 }

@@ -3,6 +3,7 @@
 #include "Device/DeviceManager.h"
 #include "Device/AppleUsbDiscovery.h"
 #include "Capture/CaptureSession.h"
+#include "Capture/UsbDisplaySize.h"
 #include "Capture/WirelessCaptureSession.h"
 #include "Capture/WirelessReceiverHub.h"
 #include "Logging.h"
@@ -724,7 +725,10 @@ std::int32_t IM_CALL im_wireless_receiver_start_ex(const wchar_t* receiver_name,
                 (width == short_edge && height == long_edge);
         };
         const auto supported =
+            (width == height && iPhoneMirror::devices::is_apple_display_long_edge(width) && frame_rate == 60) ||
             (matches(2880, 2880) && frame_rate == 60) ||
+            (matches(2360, 2360) && frame_rate == 60) ||
+            (matches(2732, 2732) && frame_rate == 60) ||
             (matches(5120, 2880) && frame_rate == 60) ||
             (matches(1920, 1080) && frame_rate == 60) ||
             (matches(1280, 720) && frame_rate == 30) ||

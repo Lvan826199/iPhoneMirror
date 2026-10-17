@@ -60,6 +60,7 @@ public sealed partial class DirectUsbInputBridge : IAsyncDisposable
     private int _stopping;
     private int _terminalEventReceived;
     private string? _muxCheckpoint;
+    private readonly CaptureMuxEndpointLease _captureMuxEndpoint = new();
     internal UsbMuxResumeContext? MuxResumeContext { get; set; }
 
     public bool IsReady { get; private set; }
@@ -411,6 +412,7 @@ public sealed partial class DirectUsbInputBridge : IAsyncDisposable
             _process is { HasExited: true, ExitCode: 0 } && _muxCheckpoint is { } checkpoint)
             MuxResumeContext?.Save(checkpoint);
         _muxCheckpoint = null;
+        _captureMuxEndpoint.Dispose();
         try { _ownedProcess?.Dispose(); } catch { }
         _ownedProcess = null;
         try { _process?.Dispose(); } catch { }
@@ -477,6 +479,9 @@ public sealed partial class DirectUsbInputBridge : IAsyncDisposable
                     break;
                 case "status":
                     var statusCode = root.TryGetProperty("code", out var c) ? c.GetString() : null;
+                    if (statusCode == "capture_mux_ready" && !_requestedWireless &&
+                        Volatile.Read(ref _stopping) == 0 && root.TryGetProperty("address", out var muxAddress))
+                        _captureMuxEndpoint.Publish(_requestedUdid, muxAddress.GetString());
                     if (statusCode != "terminated") _lastStatusCode = statusCode;
                     if (statusCode == "recovery_triggered")
                     {

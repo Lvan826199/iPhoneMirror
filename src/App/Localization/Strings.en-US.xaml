@@ -204,6 +204,9 @@
     <system:String x:Key="IndependentWindowProjectionSettings">Mirroring settings</system:String>
     <system:String x:Key="ProjectionSettingsTitle">Mirroring settings</system:String>
     <system:String x:Key="ApplicationModeLabel">Application mode</system:String>
+    <system:String x:Key="CloseMainWindowToTray">Close the main window to the system tray</system:String>
+    <system:String x:Key="CloseMainWindowToTrayHint">Keep mirroring and separate windows open. Restore the main window or exit the app from the tray.</system:String>
+    <system:String x:Key="TrayRestoreMainWindow">Restore main window</system:String>
     <system:String x:Key="ApplicationModeLightweight">Lightweight</system:String>
     <system:String x:Key="ApplyLightweightMode">Switch to lightweight mode</system:String>
     <system:String x:Key="ApplicationModeComplete">Complete</system:String>
@@ -557,7 +560,7 @@
     <system:String x:Key="UsbModeDemoAdvantage">Sends Valeria=true with the device's native DisplaySize, letting iOS provide a complete phone mirror while remaining in demonstration state. It offers the best compatibility and framing and is recommended for everyday use.</system:String>
     <system:String x:Key="UsbModeDemoDisadvantage">iOS enters Apple's demonstration state. The status-bar date, time, and battery are locked to demonstration values instead of the phone's current state.</system:String>
     <system:String x:Key="UsbModeDemoNotice">This mode does not enable AirPlay or external playback from video apps.</system:String>
-    <system:String x:Key="UsbModeAirPlayAdvantage">Sends Valeria=false, uses the device's native size, and retains first-frame probing, orientation detection, and adaptive reconfiguration. Video apps can switch to AirPlay or external playback.</system:String>
+    <system:String x:Key="UsbModeAirPlayAdvantage">Keeps the real status bar. iPad advertises the same display bounds in both orientations to avoid restarting USB on rotation. The device chooses the source resolution, which may be below panel-native pixels. Video apps may use external playback.</system:String>
     <system:String x:Key="UsbModeAirPlayDisadvantage">External-content resolution cannot be guaranteed to adapt perfectly to both the phone and the window. Content may be cropped, use the wrong aspect ratio, or be partly off-screen.</system:String>
     <system:String x:Key="UsbModeAirPlayNotice">For custom sizing, click the version in the lower-right corner five times to enable Advanced mode. Custom HPD1 dimensions are risky and can cause a black screen, cropping, or failed USB reconnection.</system:String>
     <system:String x:Key="UsbModeAisiAdvantage">Uses an Aisi-style configuration with Valeria=false and a fixed 1565×1565 request, reducing display-negotiation differences between devices.</system:String>
@@ -633,6 +636,9 @@
     <system:String x:Key="WirelessResolutionLabel">Connection resolution</system:String>
     <system:String x:Key="WirelessResolutionHelp">Applying re-advertises the AirPlay receiver capability. Use 720p or 540p on a weak network.</system:String>
     <system:String x:Key="WirelessProfileMaximum">Original quality (2880 long edge in either orientation · 60 fps)</system:String>
+    <system:String x:Key="WirelessProfileMaximumIpad">Original quality (iPad / Air · 2360 long edge · 60 fps)</system:String>
+    <system:String x:Key="WirelessProfileMaximumIpadPro">Original quality (iPad Pro 12.9 · 2732 long edge · 60 fps)</system:String>
+    <system:String x:Key="WirelessProfileNativeDimensions">Original ({0} · {1}×{2} · automatic rotation)</system:String>
     <system:String x:Key="WirelessProfile1080p">1080p (recommended · 60 fps)</system:String>
     <system:String x:Key="WirelessProfile720p">720p (smooth · 30 fps)</system:String>
     <system:String x:Key="WirelessProfile540p">540p (weak network · 30 fps)</system:String>

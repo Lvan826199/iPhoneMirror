@@ -90,6 +90,19 @@
                     <ComboBoxItem Tag="{x:Static updater:ApplicationDisplayMode.Complete}" Content="{DynamicResource ApplicationModeComplete}"/>
                     <ComboBoxItem Tag="{x:Static updater:ApplicationDisplayMode.Tray}" Content="{DynamicResource ApplicationModeTray}"/>
                 </ComboBox>
+                <Button x:Name="RestoreMainWindowButton" Content="{DynamicResource TrayRestoreMainWindow}"
+                        Click="OnRestoreClick" Margin="0,8,0,0">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource ToolButton}">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CanRestoreMainWindowFromTray}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
             </StackPanel>
         </ScrollViewer>
         <Grid Grid.Row="3" Margin="0,16,0,0">

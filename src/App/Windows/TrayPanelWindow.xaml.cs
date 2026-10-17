@@ -100,6 +100,7 @@ public partial class TrayPanelWindow : IPhoneMirror.UI.Controls.RoundedWindow
     }
 
     private void OnSettingsClick(object sender, RoutedEventArgs e) { Hide(); _settings(); }
+    private void OnRestoreClick(object sender, RoutedEventArgs e) => _viewModel.RestoreMainWindowFromTray();
     private void OnExitClick(object sender, RoutedEventArgs e) => _exit();
     private void OnHideClick(object sender, RoutedEventArgs e) => Hide();
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)

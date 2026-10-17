@@ -2295,6 +2295,39 @@ class TouchSession:
         """
         if self.transport_mode != 'usb':
             return
+        from screen_orientation import capture_mux_address, capture_mux_environment_key
+        if getattr(self, '_usb_mux_borrowed', False):
+            return
+        try:
+            shared_key = capture_mux_environment_key(self.udid or '')
+        except ValueError:
+            shared_key = None
+        shared = capture_mux_address(os.environ.get(shared_key)) if shared_key else None
+        if shared:
+            # The native orientation helper or another host-owned control
+            # bridge already owns the interface. Share its local mux server;
+            # never claim the same bulk endpoints in a second process.
+            previous = os.environ.get('USBMUXD_SOCKET_ADDRESS')
+            os.environ['USBMUXD_SOCKET_ADDRESS'] = shared
+            try:
+                check = await asyncio.wait_for(create_using_usbmux(
+                    serial=self.udid, connection_type='USB', autopair=False), 3)
+                try:
+                    if not _udid_matches(check.udid, self.udid or ''):
+                        raise ConnectionError('shared usbmux device identity mismatch')
+                finally:
+                    await check.close()
+            except BaseException:
+                if previous is None:
+                    os.environ.pop('USBMUXD_SOCKET_ADDRESS', None)
+                else:
+                    os.environ['USBMUXD_SOCKET_ADDRESS'] = previous
+                # A stale owner must not result in a competing USB claim.
+                raise
+            self._usb_mux_previous_env = previous
+            self._usb_mux_borrowed = True
+            await self.ipc.emit({'event': 'capture_mux_shared', 'address': shared})
+            return
         if _UsbMuxTransport is None or _UsbmuxdThread is None:
             # Never lose the userspace transport silently: without it a mirror
             # session cannot share the USB link with reverse control.
@@ -2400,7 +2433,7 @@ class TouchSession:
             self._usb_mux_server = server
             os.environ['USBMUXD_SOCKET_ADDRESS'] = address
             log.info('capture usbmux bridge active at %s (attempt %d)', address, attempt)
-            await self._emit_status('capture_mux_ready')
+            await self._emit_status('capture_mux_ready', address=address)
             return
 
     async def _report_capture_discovery_fallback(self, error) -> None:
@@ -2413,8 +2446,9 @@ class TouchSession:
     def _close_capture_mux(self) -> None:
         # Release only this bridge's userspace interface/listener. Never change
         # USB configuration, reset the device, or touch the capture interface.
-        if self._usb_mux_transport is None and self._usb_mux_server is None:
+        if self._usb_mux_transport is None and self._usb_mux_server is None and not getattr(self, '_usb_mux_borrowed', False):
             return
+        self._usb_mux_borrowed = False
         server, mux = self._usb_mux_server, self._usb_mux_transport
         self._usb_mux_server = self._usb_mux_transport = None
         if self._usb_mux_previous_env is None:
@@ -2476,7 +2510,7 @@ class TouchSession:
         configuration and retry the handshake before surfacing the failure.
         """
         if (not self.udid or _UsbMuxTransport is None or _UsbmuxdThread is None or
-                self._usb_mux_server is not None):
+                self._usb_mux_server is not None or getattr(self, '_usb_mux_borrowed', False)):
             raise discovery_error
         strict_candidates: list = []
         enumeration_notes: list[str] = []
@@ -2561,10 +2595,10 @@ class TouchSession:
         self._usb_mux_server = server
         os.environ['USBMUXD_SOCKET_ADDRESS'] = address
         log.info('capture usbmux recovery active at %s', address)
-        await self._emit_status('capture_mux_ready')
+        await self._emit_status('capture_mux_ready', address=address)
         return await self._create_lockdown_with_retry('USB')
 
-    async def _emit_status(self, code: str) -> None:
+    async def _emit_status(self, code: str, **fields) -> None:
         await self.ipc.emit({'event': 'status', 'code': code, 'message': {
             'connecting_device': f'正在建立{self.transport_mode_name}设备会话',
             'checking_developer_environment': '正在检查开发者模式和开发者镜像',
@@ -2582,7 +2616,7 @@ class TouchSession:
             'capture_mux_ready': '正在通过镜像共存 USB 通道连接设备',
             'initializing_touch': '正在初始化触控通道',
             'terminated': 'USB 触控会话已结束',
-        }.get(code, code)})
+        }.get(code, code), **fields})
 
     @property
     def transport_mode_name(self) -> str:
@@ -5026,10 +5060,22 @@ def main() -> int:
                         help='通过 USB 为指定设备启用 Apple Wi-Fi 同步')
     parser.add_argument('--check-runtime', action='store_true',
                         help='验证反控运行时依赖，不连接设备')
+    parser.add_argument('--observe-orientation', action='store_true',
+                        help='只读查询镜像设备的系统界面方向，不启动反控或开发者服务')
     parser.add_argument('--check-setup', action='store_true',
                         help='只读检查指定设备的现有信任、开发者模式及无线控制设置')
     parser.set_defaults(transport='usb')
     args = parser.parse_args()
+    if args.observe_orientation:
+        if not args.udid or args.transport != 'usb':
+            parser.error('--observe-orientation requires --usb and --udid')
+        from screen_orientation import observe_orientation
+        try:
+            asyncio.run(observe_orientation(sys.modules[__name__], args.udid))
+        except Exception:
+            print('IM_ORIENTATION_UNAVAILABLE', flush=True)
+            return 1
+        return 0
     if args.check_setup:
         if not args.udid:
             parser.error('--check-setup requires --udid')
