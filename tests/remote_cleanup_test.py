@@ -76,7 +76,12 @@ class RemoteCleanupTests(unittest.IsolatedAsyncioTestCase):
         display = SimpleNamespace(__aenter__=AsyncMock(), __aexit__=AsyncMock(),
                                   start_video_stream=AsyncMock(return_value=None))
         drained = asyncio.Event()
+        first_packet = True
         async def receive():
+            nonlocal first_packet
+            if first_packet:
+                first_packet = False
+                return b'media-packet'
             try: await asyncio.Event().wait()
             finally: drained.set()
         receiver = SimpleNamespace(port=1, close=Mock(), recv=receive)

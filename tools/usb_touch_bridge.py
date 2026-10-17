@@ -130,6 +130,49 @@ class BridgeUserActionRequired(RuntimeError):
         self.code = code
 
 
+class MediaAuthenticationError(ConnectionError):
+    """The media stream required to authorize HID is no longer live."""
+
+
+class MediaStreamHealth:
+    def __init__(self):
+        self.packet_available = asyncio.Event()
+        self.last_packet_at: Optional[float] = None
+        self.error: Optional[Exception] = None
+        self.reader_task: Optional[asyncio.Task] = None
+
+    def check(self):
+        if self.error is not None:
+            raise MediaAuthenticationError('Media authentication receiver failed.') from self.error
+        if self.reader_task is not None and self.reader_task.done():
+            raise MediaAuthenticationError('Media authentication receiver ended.')
+        if self.last_packet_at is None:
+            raise MediaAuthenticationError('Media authentication has not received any packets.')
+        if time.monotonic() - self.last_packet_at >= MEDIA_AUTH_SILENCE_TIMEOUT_SECONDS:
+            raise MediaAuthenticationError('Media authentication stream stopped delivering packets.')
+
+    async def wait_started(self):
+        try:
+            await asyncio.wait_for(self.packet_available.wait(), MEDIA_AUTH_START_TIMEOUT_SECONDS)
+        except TimeoutError as error:
+            raise MediaAuthenticationError('Media authentication did not deliver its first packet in time.') from error
+        self.check()
+
+
+async def _drain_media(transport, health: MediaStreamHealth):
+    try:
+        while True:
+            if not await transport.recv():
+                raise EOFError('Media authentication receiver returned no data.')
+            health.last_packet_at = time.monotonic()
+            health.packet_available.set()
+    except asyncio.CancelledError:
+        raise
+    except Exception as error:
+        health.error = error
+        health.packet_available.set()  # wake startup on failure as well as data
+
+
 async def _bounded_remote_exit(service, timeout):
     # A candidate owns its RemoteXPC channel, not its parent RSD. Keep the
     # writer before SDK teardown: cancelled wait_closed may retain the channel
@@ -208,19 +251,16 @@ async def touch_session(rsd):
             raise RuntimeError('Timed out starting the media stream that gates HID auth.') from error
         await asyncio.sleep(.3)
 
-        async def discard_media():
-            try:
-                while True:
-                    await transport.recv()
-            except (asyncio.CancelledError, OSError):
-                pass
-
-        drain = asyncio.create_task(discard_media())
+        health = MediaStreamHealth()
+        drain = health.reader_task = asyncio.create_task(_drain_media(transport, health))
+        await health.wait_started()
         hid = UniversalHIDServiceService(rsd)
         try:
             await asyncio.wait_for(hid.__aenter__(), 8)
         except TimeoutError as error:
             raise BridgePrerequisiteError('touch_surface_unavailable', 'Opening Universal HID timed out.') from error
+        health.check()
+        hid._bridge_media_health = health
         yield hid
     finally:
         async with _cleanup_cancellation_scope() as finish:
@@ -489,13 +529,16 @@ PASTEBOARD_WRITE_QUEUE_TIMEOUT_SECONDS = 20.0
 HID_OPERATION_TIMEOUT_SECONDS = 3.0
 HID_TOUCH_MOTION_TIMEOUT_SECONDS = 0.35
 HID_CLEANUP_TIMEOUT_SECONDS = 2.0
-# On devices that reject media-stream authentication (9021), iOS can revoke a
-# direct Universal HID session without warning even while the USB mirror is
-# healthy. Refresh only the HID RemoteService on the existing RSD tunnel.
+# iOS can revoke Universal HID without warning even while the USB mirror is
+# healthy, including media-auth sessions used by Cryptex. Refresh only HID on
+# the existing RSD tunnel, keeping any media authentication gate alive.
 DIRECT_HID_ROTATION_SECONDS = 180
 # An idle HID can fail without ending the tunnel reader. Two small PINGs per
 # second bound that detection delay without changing the round-trip timeout.
 HID_HEALTH_INTERVAL_SECONDS = 0.5
+# Require real media at startup; tolerate short UDP pauses during control.
+MEDIA_AUTH_START_TIMEOUT_SECONDS = 10.0
+MEDIA_AUTH_SILENCE_TIMEOUT_SECONDS = 30.0
 # Static touch plus keyboard input can otherwise be lifted by iOS even though
 # the HID socket remains healthy. Repeat only the last confirmed full snapshot.
 HID_TOUCH_KEEPALIVE_SECONDS = 1.0
@@ -2192,6 +2235,7 @@ class TouchSession:
         self.stream_answer = None
         self.drain_task = None
         self.transport = None
+        self._media_health: Optional[MediaStreamHealth] = None
         self.auth_mode: Optional[str] = None
         self.gate_open = False
         self._owns_hid = False
@@ -3627,6 +3671,7 @@ class TouchSession:
             try:
                 async with touch_session(self.rsd) as hid:
                     self.hid = hid
+                    self._media_health = getattr(hid, '_bridge_media_health', None)
                     try:
                         await self._verify_touch_surface(hid)
                         await self.ipc.emit({'event': 'status', 'code': 'hid_service_selected',
@@ -3637,16 +3682,24 @@ class TouchSession:
                         established = True
                         await self._run_serve()
                     finally:
-                        # Release while the SDK-owned HID and media gate are
-                        # still open. Outer cleanup runs after this context.
-                        await self._release_hid_state()
-                        self.hid = None
+                        # touch_session owns its original HID and the media
+                        # gate. A refreshed HID belongs to us: release/close it
+                        # before leaving this context or clearing its reference.
+                        async with _cleanup_cancellation_scope() as finish:
+                            await finish(self._release_hid_state())
+                            if self.hid is not None and self._owns_hid:
+                                await finish(self._close_remote_service(self.hid, 'media_session_hid'))
+                            self.hid = None
+                            self._owns_hid = False
+                            self._media_health = None
             except Exception as error:
                 if established:
                     raise  # established-session failures belong to its supervisor
                 self.hid = None  # touch_session has already closed its HID
                 self.gate_open = False
                 self.auth_mode = None
+                if isinstance(error, MediaAuthenticationError):
+                    raise  # HID alone cannot replace a failed authentication stream
                 if self._transport_failure_reason():
                     raise  # a different HID endpoint cannot repair a dead tunnel
                 if self._can_fallback_to_direct_hid(error):
@@ -3875,10 +3928,15 @@ class TouchSession:
                 ),
                 timeout=10.0,
             )
+            self._media_health = MediaStreamHealth()
+            self.drain_task = asyncio.create_task(self._drain())
+            self._media_health.reader_task = self.drain_task
+            await self._media_health.wait_started()
             self.gate_open = True
             self.auth_mode = 'mediastream'
-            self.drain_task = asyncio.create_task(self._drain())
             await asyncio.sleep(0.3)
+        except MediaAuthenticationError:
+            raise
         except asyncio.TimeoutError:
             await self.ipc.emit({'event': 'warning', 'code': 'gate_timeout',
                                  'message': 'startmediastream timed out; reports may be dropped'})
@@ -3899,10 +3957,12 @@ class TouchSession:
                 self.transport = None
             await self._close_remote_service(display, 'failed_media_gate')
             self.display = None
+            self._media_health = None
             self.auth_mode = 'direct'
             self.gate_open = True
 
     async def _emit_ready(self, *, probe_sender: bool = True) -> None:
+        self._check_media_auth()
         if not self.gate_open or self.hid is None:
             raise BridgePrerequisiteError(
                 'remote_control_gate_closed',
@@ -3912,6 +3972,7 @@ class TouchSession:
         # Send a harmless release and fence it with a response on the SAME HID.
         if probe_sender:
             await self._probe_hid_sender()
+        self._check_media_auth()
         self._generation += 1
         self._input_verified = False
         recovered = self._recovering
@@ -3937,6 +3998,7 @@ class TouchSession:
         if self.hid is None:
             raise RuntimeError('HID sender is unavailable')
         async with self._hid_lifecycle_lock:
+            self._check_media_auth()
             for slot in range(MAX_SLOTS):
                 report = build_touchscreen_report(slot, TOUCHSCREEN_STATE_RELEASE, 0, 0)
                 await asyncio.wait_for(self.hid.send_report(
@@ -3954,6 +4016,7 @@ class TouchSession:
         state, and leaves XPC responses available for their original caller.
         The caller holds _hid_lifecycle_lock throughout.
         """
+        self._check_media_auth()
         service = (hid if hid is not None else self.hid).service
         async with service._request_lock:
             ping = PingFrame(0, opaque_data=os.urandom(8))
@@ -3975,13 +4038,20 @@ class TouchSession:
                                 opaque_data=frame.opaque_data).serialize())
                             await service.writer.drain()
             await asyncio.wait_for(receive_ack(), HID_OPERATION_TIMEOUT_SECONDS)
+        self._check_media_auth()
 
     async def _drain(self) -> None:
-        try:
-            while True:
-                await self.transport.recv()
-        except (asyncio.CancelledError, OSError):
-            pass
+        await _drain_media(self.transport, self._media_health)
+
+    def _check_media_auth(self) -> None:
+        if self.auth_mode == 'mediastream' and self._media_health is not None:
+            try:
+                self._media_health.check()
+            except MediaAuthenticationError:
+                self.gate_open = False
+                self._input_verified = False
+                self._session_ready.clear()
+                raise
 
     async def _serve(self) -> None:
         self._serve_task = asyncio.current_task()
@@ -4141,7 +4211,7 @@ class TouchSession:
                             break
                         except Exception as error:
                             if (attempt != 0 or self.transport_mode != 'usb' or
-                                    self.auth_mode != 'direct' or
+                                    self.auth_mode not in ('direct', 'mediastream') or
                                     frame.get('kind') in {PASTE_TEXT_MESSAGE_KIND,
                                                           READ_CLIPBOARD_MESSAGE_KIND}):
                                 raise
@@ -4150,7 +4220,7 @@ class TouchSession:
                             await self.ipc.emit({
                                 'event': 'warning',
                                 'code': 'direct_hid_recovered',
-                                'message': 'Direct HID service recovered; waiting for input from the new generation.',
+                                'message': 'Universal HID recovered; waiting for input from the new generation.',
                             })
                             # Recovery already released all held state. Replaying
                             # the old press can stick a key whose release was
@@ -4188,6 +4258,12 @@ class TouchSession:
         Enter only after the failed operation releases its lifecycle lock.
         """
         async with self._hid_recovery_lock:
+            try:
+                self._check_media_auth()
+            except MediaAuthenticationError as media_error:
+                await self._mark_recovering(media_error)
+                await self._recovery_event('media_auth_failed', media_error)
+                return False  # rebuild media and HID through the transport owner
             if failed_hid is not self.hid and self._session_ready.is_set():
                 return True
             if self._recovering and self._hid_transport_failed:
@@ -4197,7 +4273,7 @@ class TouchSession:
             if reason:
                 await self._recovery_event('hid_repair_skipped_transport_dead', ConnectionError(reason))
                 return False
-            if self.auth_mode != 'direct':
+            if self.auth_mode not in ('direct', 'mediastream'):
                 return False
             await self.ipc.emit({'event': 'warning', 'code': 'direct_hid_recovery_begin',
                 'message': 'Repairing and verifying the failed HID service.'})
@@ -4212,14 +4288,15 @@ class TouchSession:
                 return False
 
     async def _request_direct_hid_rotation(self) -> None:
-        """Watch both HID transports; rotate only wired direct HID proactively."""
+        """Watch both transports; renew wired HID under either auth mode."""
         refresh_due = time.monotonic() + DIRECT_HID_ROTATION_SECONDS
         try:
             while True:
                 await asyncio.sleep(HID_HEALTH_INTERVAL_SECONDS)
                 attempted_hid = self.hid
                 try:
-                    if (self.transport_mode == 'usb' and self.auth_mode == 'direct' and
+                    self._check_media_auth()
+                    if (self.transport_mode == 'usb' and self.auth_mode in ('direct', 'mediastream') and
                             time.monotonic() >= refresh_due):
                         refreshed = await self._refresh_direct_hid(idle_only=True)
                         if refreshed is not False:
@@ -4241,7 +4318,7 @@ class TouchSession:
                 except asyncio.CancelledError:
                     raise
                 except Exception as error:
-                    log.warning('direct HID health/refresh failed: %s', error)
+                    log.warning('HID health/refresh failed: %s', error)
                     await self.ipc.emit({'event': 'warning', 'code': 'hid_health_failed',
                                          'message': f'{type(error).__name__}: {str(error)[:200]}'})
                     if self.transport_mode == 'wireless':
@@ -4257,16 +4334,17 @@ class TouchSession:
             raise
 
     async def _refresh_direct_hid(self, *, idle_only: bool = False) -> bool:
-        """Reopen only Universal HID over the existing CoreDevice tunnel."""
+        """Reopen HID on the existing tunnel, retaining any media auth gate."""
         if not hasattr(self, '_hid_lifecycle_lock'):
             self._hid_lifecycle_lock = asyncio.Lock()
         async with self._hid_lifecycle_lock:
+            self._check_media_auth()
             # Check after taking the same lock used to submit every HID report,
             # so a press racing the watchdog cannot be lost on replacement.
             if idle_only and (self._active_touch_ids or self._held_keyboard_usages or self._held_buttons):
                 return False
             await self.ipc.emit({'event': 'warning', 'code': 'direct_hid_refresh_begin',
-                                 'message': 'Refreshing the direct Universal HID session.'})
+                                 'message': f'Refreshing Universal HID; authMode={self.auth_mode}.'})
             old_hid = self.hid
             hid_type = (LegacyUniversalHIDServiceService
                         if old_hid is not None and
@@ -4305,7 +4383,7 @@ class TouchSession:
             self._owns_hid = True
             self._input_verified = False
             await self.ipc.emit({'event': 'warning', 'code': 'direct_hid_refreshed',
-                                 'message': 'Direct Universal HID session refreshed.'})
+                                 'message': f'Universal HID refreshed; authMode={self.auth_mode}.'})
             return True
 
     async def _get_device_pasteboard(self):
@@ -4533,6 +4611,7 @@ class TouchSession:
     async def _send_keyboard_report(self, usages: list[int],
                                     timestamp: Optional[int] = None) -> None:
         async with self._hid_lifecycle_lock:
+            self._check_media_auth()
             if self.hid is None:
                 raise RuntimeError('Universal HID service is unavailable')
             if self.keyboard_service_id is None:
@@ -4552,6 +4631,7 @@ class TouchSession:
                 await asyncio.wait_for(
                     self.hid.send_keyboard(self.keyboard_service_id, usages, timestamp),
                     timeout=HID_OPERATION_TIMEOUT_SECONDS)
+                self._check_media_auth()
                 self._held_keyboard_usages = frozenset(usages)
 
     async def _send_touch_report(self, report: bytes, *, motion: bool = False,
@@ -4564,6 +4644,7 @@ class TouchSession:
         timeout = (HID_TOUCH_MOTION_TIMEOUT_SECONDS if motion
                    else HID_OPERATION_TIMEOUT_SECONDS)
         async with self._hid_lifecycle_lock:
+            self._check_media_auth()
             if self.hid is None:
                 raise RuntimeError('Universal HID service is unavailable')
             if active_pointer_ids is not None:
@@ -4583,6 +4664,7 @@ class TouchSession:
                         'message': 'Waiting for the same in-flight motion write; no duplicate XPC request sent.'})
                     await asyncio.wait_for(asyncio.shield(send),
                         max(0.001, HID_OPERATION_TIMEOUT_SECONDS - timeout))
+                self._check_media_auth()
                 if active_pointer_ids is not None:
                     self._active_touch_ids = set(active_pointer_ids)
                     self._touch_keepalive_contacts = tuple(
@@ -4658,6 +4740,7 @@ class TouchSession:
 
     async def _apply_button(self, usage_page: int, usage_code: int, state: str) -> None:
         async with self._hid_lifecycle_lock:
+            self._check_media_auth()
             if self.indigo is None:
                 indigo = IndigoHIDService(self.rsd)
                 try:
@@ -4673,6 +4756,7 @@ class TouchSession:
             await asyncio.wait_for(
                 self.indigo.send_button(usage_page, usage_code, state_code),
                 timeout=HID_OPERATION_TIMEOUT_SECONDS)
+            self._check_media_auth()
             if state != 'down':
                 self._held_buttons.discard(button)
 
@@ -4819,6 +4903,7 @@ class TouchSession:
             self.stream_answer = None
             self.drain_task = None
             self.transport = None
+            self._media_health = None
             self.gate_open = False
             self.auth_mode = None
 

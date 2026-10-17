@@ -672,7 +672,13 @@ class MediaSessionTests(unittest.IsolatedAsyncioTestCase):
             start_video_stream=AsyncMock(), stop_media_stream=AsyncMock())
         self.hid = SimpleNamespace(__aenter__=AsyncMock(), __aexit__=AsyncMock())
         self.closed = []
-        async def receive(): await asyncio.Event().wait()
+        first_packet = True
+        async def receive():
+            nonlocal first_packet
+            if first_packet:
+                first_packet = False
+                return b'media-packet'
+            await asyncio.Event().wait()
         self.receiver = SimpleNamespace(port=1, close=lambda: self.closed.append(True), recv=receive)
         self.enterContext(patch.object(b, 'DisplayService', return_value=self.display))
         self.enterContext(patch.object(b, 'UniversalHIDServiceService', return_value=self.hid))
