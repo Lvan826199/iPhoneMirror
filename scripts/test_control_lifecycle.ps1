@@ -4,7 +4,10 @@ param([string]$Python = 'python')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root 'src\App.Runtime.Tests\IPhoneMirror.App.Runtime.Tests.csproj'
-$pythonPath = (Get-Command $Python -CommandType Application -ErrorAction Stop).Source
+$pythonPath = (Get-Command $Python -CommandType Application -ErrorAction Stop |
+    Select-Object -First 1).Source
+$dotnetPath = (Get-Command dotnet -CommandType Application -ErrorAction Stop |
+    Select-Object -First 1).Source
 dotnet build $project --configuration Release -p:NuGetAudit=false
 if ($LASTEXITCODE -ne 0) { throw 'Control lifecycle test build failed.' }
 $assembly = dotnet msbuild $project -nologo -p:Configuration=Release -getProperty:TargetPath
@@ -14,7 +17,7 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($assembly)) {
 # These focused entry points do not create WPF windows or access a phone.
 # Use an installed-app environment, matching build.ps1's managed test runner.
 foreach ($arguments in @(@('--ddi-startup'), @('--control-lifecycle', $pythonPath))) {
-    $startInfo = [Diagnostics.ProcessStartInfo]::new((Get-Command dotnet).Source)
+    $startInfo = [Diagnostics.ProcessStartInfo]::new($dotnetPath)
     $startInfo.UseShellExecute = $false
     $startInfo.WorkingDirectory = $root
     foreach ($name in @($startInfo.Environment.Keys)) {
