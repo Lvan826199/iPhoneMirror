@@ -494,6 +494,25 @@ public sealed partial class DirectUsbInputBridge : IAsyncDisposable
                     break;
                 case "ready":
                     if (Volatile.Read(ref _stopping) != 0) return;
+                    if (!root.TryGetProperty("protocol", out var protocol) ||
+                        protocol.ValueKind != JsonValueKind.Number ||
+                        !protocol.TryGetInt32(out var protocolVersion) ||
+                        protocolVersion != CoreDeviceTouchProtocol.ProtocolVersion)
+                    {
+                        RejectReady("bridge_transport_mismatch", LocalizationService.Get("TouchBridgeInvalidOutput"));
+                        return;
+                    }
+                    // Older protocol-2 bridges omitted generation. Preserve
+                    // that compatibility, but reject a malformed advertised
+                    // generation rather than sending frames the child drops.
+                    long readyWireGeneration = 0;
+                    if (root.TryGetProperty("generation", out var generation) &&
+                        (generation.ValueKind != JsonValueKind.Number ||
+                         !generation.TryGetInt64(out readyWireGeneration) || readyWireGeneration <= 0))
+                    {
+                        RejectReady("bridge_transport_mismatch", LocalizationService.Get("TouchBridgeInvalidOutput"));
+                        return;
+                    }
                     var readyUdid = root.TryGetProperty("udid", out var u) ? u.GetString() : null;
                     var transport = root.TryGetProperty("transport", out var t) ? t.GetString() : null;
                     if (!string.Equals(readyUdid, _requestedUdid, StringComparison.OrdinalIgnoreCase))
@@ -526,8 +545,7 @@ public sealed partial class DirectUsbInputBridge : IAsyncDisposable
                         _readySignal?.TrySetException(CreateStartupException(gateMessage));
                         return;
                     }
-                    Interlocked.Exchange(ref _wireGeneration,
-                        root.TryGetProperty("generation", out var generation) ? generation.GetInt64() : 0);
+                    Interlocked.Exchange(ref _wireGeneration, readyWireGeneration);
                     Interlocked.Increment(ref _readyGeneration);
                     IsReady = true;
                     Interlocked.Exchange(ref _terminalEventReceived, 0);

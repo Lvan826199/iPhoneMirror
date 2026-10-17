@@ -9,6 +9,7 @@ internal static partial class Program
 {
     private static int RunDdiStartupTests(string? packagedBridge = null)
     {
+        RunControlHandshakeAuditTests();
         var bundleCheck = typeof(DirectUsbInputBridge).GetMethod("HasCompletePersonalizedDdiBundle",
             BindingFlags.NonPublic | BindingFlags.Static)!;
         var bundleDirectory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ddi-alias-" + Guid.NewGuid().ToString("N"));

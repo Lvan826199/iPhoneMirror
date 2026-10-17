@@ -1016,6 +1016,7 @@ class TestDeveloperEnvironmentPreflight(unittest.IsolatedAsyncioTestCase):
 
         async def initialize_touch(*, open_media_gate=True):
             attempts.append(open_media_gate)
+            session.hid = object()  # Successful initialization owns a HID.
 
         from unittest.mock import AsyncMock
         with patch.object(session, '_initialize_touch_with_retry', initialize_touch), \

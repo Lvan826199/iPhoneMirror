@@ -2198,6 +2198,7 @@ class TouchSession:
         self._ddi_was_mounted = False
         self._ddi_uses_cryptex = False
         self._ddi_personalized_fallback = False
+        self._wireless_ddi_prepared = False
         self._ddi_refresh_attempted = False
         self._ddi_deadline = None
         self._ddi_rejection_scope = None
@@ -2793,7 +2794,7 @@ class TouchSession:
                     if index + 1 < len(pairing_services):
                         await self.ipc.emit({'event': 'warning', 'code': 'wireless_route_retry',
                             'message': f'Wireless route {index + 1} failed; trying the next discovered address.'})
-            if not needs_ddi_recovery or not allow_ddi_recovery:
+            if not needs_ddi_recovery or not allow_ddi_recovery or self._wireless_ddi_prepared:
                 if isinstance(last_error, BridgePrerequisiteError):
                     raise last_error
                 raise BridgePrerequisiteError('wireless_remote_pairing_failed',
@@ -2809,6 +2810,10 @@ class TouchSession:
             await self._connect_via_remote_pairing(allow_ddi_recovery=False)
 
     async def _prepare_ddi_for_remote_pairing(self) -> None:
+        # Network and RemotePairing fallback share one startup. A completed
+        # USB preparation must not be repeated by every enclosing retry loop.
+        if self._wireless_ddi_prepared:
+            return
         try:
             lockdown = await self._create_lockdown_with_retry('USB')
         except TimeoutError as error:
@@ -2832,6 +2837,7 @@ class TouchSession:
             if not self._ddi_uses_cryptex and self._ddi_was_mounted and not self._ddi_refresh_attempted:
                 self._ddi_refresh_attempted = True
                 await self._refresh_personalized_ddi(lockdown)
+            self._wireless_ddi_prepared = True
         finally:
             with contextlib.suppress(Exception):
                 await asyncio.wait_for(lockdown.close(), 2)
@@ -3897,7 +3903,7 @@ class TouchSession:
             self.gate_open = True
 
     async def _emit_ready(self, *, probe_sender: bool = True) -> None:
-        if not self.gate_open and self.hid is None:
+        if not self.gate_open or self.hid is None:
             raise BridgePrerequisiteError(
                 'remote_control_gate_closed',
                 'The media-stream authentication gate is closed; the bridge will not claim ready.',
@@ -3991,9 +3997,8 @@ class TouchSession:
         keyboard_paste_tasks: set[asyncio.Task[None]] = set()
         automation_tasks: dict[str, asyncio.Task[None]] = {}
 
-        async def automation_clipboard(frame: dict) -> None:
+        async def automation_clipboard(frame: dict, generation: int) -> None:
             request_id = frame['requestId']
-            generation = self._generation
             result = {'event': 'clipboard_result', 'requestId': request_id,
                       'generation': generation, 'success': False}
             try:
@@ -4013,6 +4018,8 @@ class TouchSession:
                     await self._write_device_pasteboard(text)
                 else:
                     async with self._paste_sequence_lock:
+                        if generation != self._generation or self._recovering:
+                            raise RuntimeError('Paste belongs to a previous input generation.')
                         await self._apply_paste_text(text)
                 result['success'] = generation == self._generation and not self._recovering
                 if not result['success']:
@@ -4032,9 +4039,11 @@ class TouchSession:
             paste_tasks.discard(task)
             keyboard_paste_tasks.discard(task)
 
-        async def run_paste(text: str) -> None:
+        async def run_paste(text: str, generation: int) -> None:
             try:
                 async with self._paste_sequence_lock:
+                    if generation != self._generation or self._recovering:
+                        return
                     await self._apply_paste_text(text)
             except asyncio.CancelledError:
                 raise
@@ -4087,7 +4096,7 @@ class TouchSession:
                                         not request_id.isascii() or not request_id.isalnum() or
                                         request_id in automation_tasks or len(automation_tasks) >= 16):
                                     raise ValueError('invalid automation request')
-                                task = asyncio.create_task(automation_clipboard(frame))
+                                task = asyncio.create_task(automation_clipboard(frame, self._generation))
                                 automation_tasks[request_id] = task
                                 paste_tasks.add(task)
                                 if frame.get('kind') != READ_CLIPBOARD_MESSAGE_KIND:
@@ -4107,7 +4116,7 @@ class TouchSession:
                                 text = frame.get('text')
                                 if not isinstance(text, str):
                                     raise ValueError('paste text must be a string')
-                                paste_task = asyncio.create_task(run_paste(text))
+                                paste_task = asyncio.create_task(run_paste(text, self._generation))
                                 paste_tasks.add(paste_task)
                                 keyboard_paste_tasks.add(paste_task)
                                 paste_task.add_done_callback(track_paste_task)
@@ -4601,9 +4610,24 @@ class TouchSession:
     async def _apply_paste_text(self, text: str) -> None:
         if self.rsd is None:
             raise RuntimeError('pasteboard service is unavailable')
+        generation = self._generation
+
+        def current():
+            if generation != self._generation or self._recovering:
+                raise RuntimeError('Paste belongs to a previous input generation.')
+
+        async def send(usages):
+            # Repair owns this lock through generation change and ready. Keep
+            # the check and each report in the same recovery transaction so an
+            # old chord (including its release) cannot reach replacement HID.
+            async with self._hid_recovery_lock:
+                current()
+                await self._send_keyboard_report(usages)
+
         # Retrying SET is idempotent even if its reply was lost. Retrying the
         # HID chord is not: iOS may already have pasted before a send times out.
         for attempt in range(2):
+            current()
             try:
                 await self._write_device_pasteboard(text)
                 break
@@ -4621,16 +4645,16 @@ class TouchSession:
                 await asyncio.sleep(0.15)
                 # A failed send may still have delivered the modifier to iOS.
                 command_pressed = True
-                await self._send_keyboard_report([0xE3])
+                await send([0xE3])
                 await asyncio.sleep(0.06)
-                await self._send_keyboard_report([0xE3, 0x19])
+                await send([0xE3, 0x19])
                 await asyncio.sleep(0.08)
-                await self._send_keyboard_report([0xE3])
+                await send([0xE3])
                 await asyncio.sleep(0.06)
             finally:
                 if command_pressed:
                     with contextlib.suppress(Exception, asyncio.CancelledError):
-                        await self._send_keyboard_report([])
+                        await send([])
 
     async def _apply_button(self, usage_page: int, usage_code: int, state: str) -> None:
         async with self._hid_lifecycle_lock:
