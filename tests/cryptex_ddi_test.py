@@ -392,6 +392,19 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
                 await session._preflight_developer_environment(self.lockdown())
             legacy.assert_not_awaited()
 
+    async def test_real_preparation_tunnel_failures_do_not_try_another_image(self):
+        for error, code in [(TimeoutError(), 'developer_image_service_timeout'),
+                            (bridge.ConnectionFailedError(), 'apple_connection_lost')]:
+            session = self.session()
+            with self.subTest(error=type(error).__name__), \
+                 patch.object(bridge.CoreDeviceTunnelProxy, 'create', AsyncMock(side_effect=error)), \
+                 patch.object(session, '_is_personalized_ddi_mounted', AsyncMock()) as legacy:
+                with self.assertRaises(ddi.BridgePrerequisiteError) as raised:
+                    await session._preflight_developer_environment(self.lockdown())
+                self.assertEqual(raised.exception.code, code)
+                self.assertIs(raised.exception.__cause__, error)
+                legacy.assert_not_awaited()
+
     async def test_legacy_fallback_shares_original_preparation_deadline(self):
         session = self.session()
         session._ddi_deadline = asyncio.get_running_loop().time() + .02

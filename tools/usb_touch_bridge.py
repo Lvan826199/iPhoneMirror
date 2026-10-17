@@ -2975,6 +2975,9 @@ class TouchSession:
                         await self._close_remote_service(rsd, 'cryptex_preparation_rsd')
             # RSD advertises a handshake snapshot. The subsequent control
             # tunnel is opened only after this preparation tunnel is closed.
+        except TimeoutError as error:
+            raise BridgePrerequisiteError('developer_image_service_timeout',
+                                          'Opening the Cryptex DDI tunnel timed out.') from error
         except BridgePrerequisiteError:
             raise
         except Exception as error:
