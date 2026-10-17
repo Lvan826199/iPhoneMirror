@@ -126,6 +126,30 @@ class BundleTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(requests), 10)
                 self.assertFalse(list(root.glob('*.part')))
 
+    async def test_invalid_raw_body_uses_verified_api_fallback(self):
+        for damage in ('hash', 'truncated', 'oversized'):
+            with self.subTest(damage=damage), TemporaryDirectory() as temp:
+                payloads, hashes = self.fixture(Path(temp))
+                requests = []
+                def handler(request):
+                    requests.append(request)
+                    data = payloads[request.url.path.rsplit('/', 1)[-1]]
+                    if request.url.host == 'raw.githubusercontent.com':
+                        data = {'hash': b'x' * len(data), 'truncated': data[:-1],
+                                'oversized': data + b'x'}[damage]
+                    else:
+                        self.assertEqual(request.url.params['ref'], ddi.CRYPTEX_DDI_REVISION)
+                    return httpx.Response(200, content=data)
+                real_client = httpx.AsyncClient
+                with patch.dict(ddi.os.environ, {'LOCALAPPDATA': temp}), \
+                     patch.object(ddi, 'CRYPTEX_DDI_FILES', hashes), \
+                     patch.object(ddi.httpx, 'AsyncClient', side_effect=lambda **kw:
+                        real_client(transport=httpx.MockTransport(handler), **kw)):
+                    root = await ddi.fetch_cryptex_bundle()
+                    ddi.validate_cryptex_bundle(root)
+                self.assertEqual(len(requests), 10)
+                self.assertFalse(list(root.glob('*.part')))
+
     async def test_manifest_digest_is_checked_even_when_pinned_file_hash_matches(self):
         with TemporaryDirectory() as temp:
             root = Path(temp)
@@ -302,6 +326,39 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
                 inventory.assert_awaited_once_with(lockdown)
                 self.assertEqual(mount.await_count, int(not mounted))
                 self.assertTrue(session._ddi_uses_cryptex)
+
+    async def test_successful_personalized_fallback_is_kept_across_hid_retries(self):
+        for mounted in (False, True):
+            session = self.session()
+            lockdown = self.lockdown()
+            with self.subTest(mounted=mounted), \
+                 patch.object(session, '_prepare_cryptex_developer_image', AsyncMock(side_effect=
+                    ddi.BridgePrerequisiteError('developer_image_mount_failed', 'rejected'))) as cryptex, \
+                 patch.object(session, '_is_personalized_ddi_mounted',
+                              AsyncMock(side_effect=[mounted, True, True])) as inventory, \
+                 patch.object(session, '_mount_personalized_ddi', AsyncMock()) as mount:
+                await session._preflight_developer_environment(lockdown)
+                await session._preflight_developer_environment(lockdown)
+                session._recovering = True
+                await session._preflight_developer_environment(lockdown)
+                cryptex.assert_awaited_once()
+                self.assertEqual(inventory.await_count, 3)
+                self.assertEqual(mount.await_count, int(not mounted))
+
+    async def test_failed_or_cancelled_personalized_fallback_does_not_commit_route(self):
+        for failure in (asyncio.CancelledError(),
+                        ddi.BridgePrerequisiteError('apple_connection_lost', 'disconnected')):
+            session = self.session()
+            lockdown = self.lockdown()
+            with self.subTest(failure=type(failure).__name__), \
+                 patch.object(session, '_prepare_cryptex_developer_image', AsyncMock(side_effect=[
+                    ddi.BridgePrerequisiteError('developer_image_mount_failed', 'rejected'), None])) as cryptex, \
+                 patch.object(session, '_is_personalized_ddi_mounted', AsyncMock(return_value=False)), \
+                 patch.object(session, '_mount_personalized_ddi', AsyncMock(side_effect=failure)):
+                with self.assertRaises(type(failure)):
+                    await session._preflight_developer_environment(lockdown)
+                await session._preflight_developer_environment(lockdown)
+                self.assertEqual(cryptex.await_count, 2)
 
     async def test_cryptex_fallback_is_limited_to_image_and_service_compatibility(self):
         fallback_codes = {'developer_image_mount_failed', 'developer_image_bundle_invalid',

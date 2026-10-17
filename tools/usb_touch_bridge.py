@@ -2197,6 +2197,7 @@ class TouchSession:
         self._owns_hid = False
         self._ddi_was_mounted = False
         self._ddi_uses_cryptex = False
+        self._ddi_personalized_fallback = False
         self._ddi_refresh_attempted = False
         self._ddi_deadline = None
         self._ddi_rejection_scope = None
@@ -2669,7 +2670,7 @@ class TouchSession:
             if error.code != 'touch_surface_unavailable':
                 raise
 
-        if self._ddi_uses_cryptex and self.transport_mode == 'wireless':
+        if self.transport_mode == 'wireless':
             # A Network Lockdown session may already have a prepared DDI. If
             # its actual HID probe fails, prepare over the exact USB device
             # once, then build a new wireless RSD service snapshot.
@@ -2908,8 +2909,9 @@ class TouchSession:
             self._ddi_was_mounted = False
             if self.transport_mode == 'usb' or usb_preparation:
                 try:
-                    await self._prepare_cryptex_developer_image(lockdown)
-                    return
+                    if not self._ddi_personalized_fallback:
+                        await self._prepare_cryptex_developer_image(lockdown)
+                        return
                 except BridgePrerequisiteError as error:
                     # A new preparation route must not disable the pre2 route
                     # on phones that still accept PersonalizedDMG. Only image
@@ -2938,9 +2940,13 @@ class TouchSession:
                 'developer_mode_required',
                 'Developer Mode must be enabled on the device before USB control can start.',
             ) from error
-        if self._ddi_was_mounted:
-            return
-        await self._mount_personalized_ddi(lockdown)
+        if not self._ddi_was_mounted:
+            await self._mount_personalized_ddi(lockdown)
+        if self._ddi_uses_cryptex:
+            # Commit only after verified reuse/mount. Later RSD/HID retries
+            # must not reopen the rejected Cryptex preparation route. Keep
+            # checking actual inventory, including after transport recovery.
+            self._ddi_personalized_fallback = True
 
     async def _prepare_cryptex_developer_image(self, lockdown) -> None:
         from pymobiledevice3.remote.userspace_tunnel import UserspaceDialPlane
@@ -3215,6 +3221,14 @@ class TouchSession:
         except TimeoutError as error:
             raise BridgePrerequisiteError('developer_image_service_timeout',
                                           'Querying the mounted DDI inventory timed out.') from error
+        except BridgePrerequisiteError:
+            raise
+        except Exception as error:
+            # Query commands can fail after the service was opened. Classify
+            # those device errors just like failures during service startup.
+            if (known := device_failure(error)) is not None:
+                raise known from error
+            raise
 
     @staticmethod
     async def _query_personalized_ddi_inventory(lockdown) -> bool:
@@ -3296,7 +3310,16 @@ class TouchSession:
             # future wireless provisioning is unavailable on this device.
             self._remote_pairing_provision_attempted = True
             await self._provision_remote_pairing(lockdown)
-        await self._preflight_developer_environment(lockdown)
+        try:
+            await self._preflight_developer_environment(lockdown)
+        except BridgePrerequisiteError as error:
+            if self.transport_mode != 'wireless' or error.code != 'developer_image_service_unavailable':
+                raise
+            # A Network Lockdown record need not expose the USB image service.
+            # Probe the actual control route before requiring a cable. Missing
+            # HID is handled by exact-device USB preparation in the outer owner.
+            await self.ipc.emit({'event': 'warning', 'code': 'wireless_ddi_check_deferred',
+                'message': 'Network DDI service unavailable; verifying wireless HID before USB preparation.'})
         # This owner survives sender/health-task cancellation. The raw usbmux
         # reader and sequence numbers belong to the whole wired session.
         while True:

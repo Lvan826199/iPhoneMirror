@@ -396,10 +396,10 @@ async def fetch_cryptex_bundle() -> Path:
                                 raise ValueError('Cryptex download size/hash mismatch')
                         partial.replace(target)
                         break
-                    except httpx.HTTPError:
+                    except (httpx.HTTPError, ValueError):
                         if index + 1 == len(urls):
                             raise
-                        log.info('Cryptex DDI raw download unavailable; trying the pinned GitHub API asset.')
+                        log.info('Cryptex DDI raw download unavailable or invalid; trying the pinned GitHub API asset.')
                     finally:
                         if partial is not None:
                             partial.unlink(missing_ok=True)
