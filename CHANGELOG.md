@@ -3,8 +3,6 @@
 All notable changes to iPhoneMirror are documented here. The project follows
 [Semantic Versioning](https://semver.org/) for published releases.
 
-## [Unreleased]
-
 ## [1.8.5-pre4] - 2026-10-29
 
 ### 新增与修复

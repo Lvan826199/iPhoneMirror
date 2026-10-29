@@ -2,8 +2,6 @@
 
 iPhoneMirror 的重要變更均記錄於此。已發布版本遵循[語意化版本](https://semver.org/)規範。
 
-## [Unreleased]
-
 ## [1.8.5-pre4] - 2026-10-29
 
 ### 新增與修正
