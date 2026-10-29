@@ -5,7 +5,7 @@ namespace IPhoneMirror.App.Services;
 internal static class UsbDeviceRefreshPolicy
 {
     internal static bool ShouldRefreshMetadata(bool forceDeviceEnumeration,
-        bool hasWiredSession) => forceDeviceEnumeration && !hasWiredSession;
+        bool hasWiredSession) => forceDeviceEnumeration;
 
     internal static bool IsUsbTransitionState(CaptureState state) => state is
         CaptureState.ActivatingUsb or CaptureState.WaitingForDevice or

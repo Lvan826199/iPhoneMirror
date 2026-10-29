@@ -157,6 +157,7 @@ public:
     void stop() noexcept;
     [[nodiscard]] bool running() const noexcept;
     [[nodiscard]] bool ready() const noexcept;
+    [[nodiscard]] bool dlna_failed() const noexcept { return dlna_failed_.load(); }
     [[nodiscard]] std::vector<WirelessDeviceSnapshot> devices() const;
     [[nodiscard]] std::shared_ptr<WirelessClientStream> attach(
         std::wstring_view device_id, CapturePreferences preferences);
@@ -184,6 +185,7 @@ private:
     ScopedHandle process_;
     std::atomic_bool stopping_{};
     std::atomic_bool ready_{};
+    std::atomic_bool dlna_failed_{};
     std::atomic_bool pipe_disconnected_{};
     detail::MediaCommandQueue media_commands_;
     struct PlaybackUpdate {

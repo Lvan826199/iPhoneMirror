@@ -7,12 +7,12 @@
     <sys:Double x:Key="PageTitleFontSize">24</sys:Double>
     <sys:Double x:Key="DialogTitleFontSize">20</sys:Double>
     <sys:Double x:Key="SectionTitleFontSize">14</sys:Double>
-    <sys:Double x:Key="BodyFontSize">13</sys:Double>
-    <sys:Double x:Key="SecondaryFontSize">12</sys:Double>
-    <sys:Double x:Key="CaptionFontSize">11</sys:Double>
+    <sys:Double x:Key="BodyFontSize">14</sys:Double>
+    <sys:Double x:Key="SecondaryFontSize">13</sys:Double>
+    <sys:Double x:Key="CaptionFontSize">12</sys:Double>
     <sys:Double x:Key="ButtonFontSize">14</sys:Double>
-    <sys:Double x:Key="FontSize10">10</sys:Double>
-    <sys:Double x:Key="FontSize11">11</sys:Double>
+    <sys:Double x:Key="FontSize10">12</sys:Double>
+    <sys:Double x:Key="FontSize11">12</sys:Double>
     <sys:Double x:Key="FontSize12">12</sys:Double>
     <sys:Double x:Key="FontSize13">13</sys:Double>
     <sys:Double x:Key="FontSize14">14</sys:Double>
@@ -24,13 +24,20 @@
     <sys:Double x:Key="FontSize21">21</sys:Double>
     <sys:Double x:Key="FontSize22">22</sys:Double>
     <sys:Double x:Key="FontSize24">24</sys:Double>
+    <sys:Double x:Key="FontSize28">28</sys:Double>
+    <sys:Double x:Key="FontSize32">32</sys:Double>
     <sys:Double x:Key="DialogContentMinHeight">120</sys:Double>
+    <sys:Double x:Key="SetupPageMaxWidth">680</sys:Double>
+    <sys:Double x:Key="SetupAssessmentMaxWidth">720</sys:Double>
+    <sys:Double x:Key="SetupWelcomeMaxWidth">440</sys:Double>
     <sys:Double x:Key="ControlMinHeight">40</sys:Double>
     <sys:Double x:Key="CompactControlMinHeight">32</sys:Double>
     <sys:Double x:Key="SubtitleLineHeight">18</sys:Double>
     <sys:Double x:Key="ReleaseNotesLineHeight">21</sys:Double>
     <sys:Double x:Key="BodyLineHeight">20</sys:Double>
     <sys:Double x:Key="CaptionLineHeight">16</sys:Double>
+    <sys:Double x:Key="WelcomeLineHeight">28</sys:Double>
+    <sys:Double x:Key="BindingNoteLineHeight">19</sys:Double>
     <Thickness x:Key="PagePadding">24,20</Thickness>
     <Thickness x:Key="DialogPadding">24</Thickness>
     <Thickness x:Key="CardPadding">16</Thickness>
@@ -48,6 +55,7 @@
     <CornerRadius x:Key="DialogCornerRadius">20</CornerRadius>
     <CornerRadius x:Key="PopupCornerRadius">12</CornerRadius>
     <Thickness x:Key="WindowShadowMargin">10</Thickness>
+    <Thickness x:Key="WindowActionsMargin">24,20,24,0</Thickness>
 
     <!-- AccessText creates an internal TextBlock; its font must follow the owning label. -->
     <Style x:Key="ControlAccessTextLabel" TargetType="TextBlock">

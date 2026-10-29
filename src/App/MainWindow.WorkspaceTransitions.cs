@@ -45,8 +45,8 @@ public partial class MainWindow
     {
         _workspaceLeftSurfaceStartWidth = GetLightweightElementWidth(LeftPanelHost);
         _workspaceRightSurfaceStartWidth = GetLightweightElementWidth(ControlPanel);
-        _workspaceLeftSurfaceTargetWidth = showLeft ? 300 : 0;
-        _workspaceRightSurfaceTargetWidth = showSettings ? 336 : 0;
+        _workspaceLeftSurfaceTargetWidth = showLeft ? WorkspaceDeviceWidth : 0;
+        _workspaceRightSurfaceTargetWidth = showSettings ? WorkspaceSettingsWidth : 0;
         _workspaceLeftGapStartWidth = GetLightweightColumnWidth(LeftGapColumn);
         _workspaceRightGapStartWidth = GetLightweightColumnWidth(RightGapColumn);
         _workspaceLeftGapTargetWidth = showLeft ? 18 : 0;

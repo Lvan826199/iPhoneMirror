@@ -732,6 +732,7 @@
     <system:String x:Key="VirtualCameraDescription">Expose the selected mirror as a camera device that conferencing and recording applications can select.</system:String>
     <system:String x:Key="VirtualCameraBackendMissing">No compatible Windows virtual-camera media source is installed. This button stays disabled instead of reporting a camera that does not exist.</system:String>
     <system:String x:Key="StartVirtualCamera">Start virtual camera</system:String>
+    <system:String x:Key="StopVirtualCamera">Stop virtual camera</system:String>
     <system:String x:Key="StopMediaOutput">Stop output</system:String>
     <system:String x:Key="RecordSaveTitle">Save mirrored recording</system:String>
     <system:String x:Key="RecordMp4Filter">MP4 video (*.mp4)|*.mp4</system:String>
@@ -1635,4 +1636,13 @@ Pair, select and save.</system:String>
     <system:String x:Key="StopRecordingOnly">Stop recording</system:String>
     <system:String x:Key="StopStreamingOnly">Stop live stream</system:String>
     <system:String x:Key="MediaOutputRecordingAndStreaming">Recording and streaming</system:String>
+    <system:String x:Key="DeviceBindingOperationFailed">The device operation could not be completed. Try again, and check the diagnostic log if the problem persists.</system:String>
+    <system:String x:Key="DeviceBindingRefreshFailed">Device profiles could not be refreshed. Try again, and check the diagnostic log if the problem persists.</system:String>
+    <system:String x:Key="MediaOutputOperationFailed">The media output operation could not be completed. Try again, and check the diagnostic log if the problem persists.</system:String>
+    <system:String x:Key="TrayStartFailed">Mirroring could not start from the tray. Check the device and try again.</system:String>
+    <system:String x:Key="TrayRefreshFailed">Devices could not be refreshed from the tray. Try again.</system:String>
+    <system:String x:Key="RecordingSaveRetry">The recording is still available to save. Choose Save again and select a writable folder.</system:String>
+    <system:String x:Key="MicrophoneRefreshFailed">Microphones could not be refreshed. Check the microphone connection and permissions, then try again.</system:String>
+    <system:String x:Key="WirelessOriginalStartupFailed">The wireless receiver stopped immediately after startup. Apply the wireless settings to retry.</system:String>
+    <system:String x:Key="DlnaRecovering">AirPlay is available; DLNA failed to start and is retrying automatically.</system:String>
 </ResourceDictionary>

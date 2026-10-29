@@ -220,9 +220,8 @@ internal sealed class MediaOutputService : IMediaOutputSession
             var processRequest = request;
             if (request.Kind == MediaOutputKind.Recording)
             {
-                recordingStagingPath = PendingRecordingStore.CreateStagingPath(
+                recordingStagingPath = PendingRecordingStore.PrepareStagingPath(
                     request.Destination);
-                TryDeleteFile(recordingStagingPath);
                 processRequest = request with { Destination = recordingStagingPath };
             }
             var includeAudio = request.Kind == MediaOutputKind.Whip
@@ -410,21 +409,22 @@ internal sealed class MediaOutputService : IMediaOutputSession
             }
             if (recordingStagingPath is not null)
             {
+                var finalized = failure is null;
                 if (failure is null)
                 {
                     try
                     {
-                        File.Move(recordingStagingPath, request.Destination,
-                            overwrite: false);
+                        PendingRecordingStore.PublishFinalized(recordingStagingPath,
+                            request.Destination);
                     }
                     catch (Exception error)
                     {
                         failure = new IOException(
-                            "The finalized recording could not be made available for saving.",
+                            $"The finalized recording is retained at {recordingStagingPath} and could not be published for saving.",
                             error);
                     }
                 }
-                if (failure is not null) TryDeleteFile(recordingStagingPath);
+                if (!finalized) TryDeleteFile(recordingStagingPath);
             }
             process.Dispose();
             await _lifecycleGate.WaitAsync();

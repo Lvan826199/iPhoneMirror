@@ -16,6 +16,7 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
     private readonly bool _previewOnly;
     private bool _savePromptOpen;
     private (uint Width, uint Height)? _lastDefaultSize;
+    private (uint Width, uint Height)? _lastDefaultCameraSize;
     private readonly CancellationTokenSource _microphoneCancellation = new();
     private bool _microphoneRefreshRunning;
 
@@ -39,6 +40,7 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
             }
             if (VirtualCameraCurrentResolutionItem.Content is string caption)
                 VirtualCameraCurrentResolutionItem.Content = LocalizationService.RefreshText(caption);
+            UpdateStartButtons();
         });
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         Loaded += OnLoaded;
@@ -91,7 +93,11 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
             nameof(MainViewModel.CanUseVirtualCamera) or
             nameof(MainViewModel.CanInstallVirtualCamera) or
             nameof(MainViewModel.CanUninstallVirtualCamera) or
-            nameof(MainViewModel.CanStopMediaOutput))
+            nameof(MainViewModel.CanStopMediaOutput) or
+            nameof(MainViewModel.IsRecordingMediaOutput) or
+            nameof(MainViewModel.IsStreamingMediaOutput) or
+            nameof(MainViewModel.IsVirtualCameraOutputRunning) or
+            nameof(MainViewModel.CanDiscardRecording))
             UpdateStartButtons();
         if (e.PropertyName == nameof(MainViewModel.SourceVideoHeight) &&
             !_viewModel.IsMediaOutputRunning)
@@ -107,6 +113,7 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
     {
         if (!IsLoaded && !force) return;
         var size = _viewModel.SuggestedMediaOutputSize();
+        var cameraSize = _viewModel.SuggestedVirtualCameraSize();
         var previous = _lastDefaultSize;
         var updateRecording = force || previous is null ||
             (RecordWidthBox.Text == previous.Value.Width.ToString() &&
@@ -114,8 +121,8 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
         var updateStreaming = force || previous is null ||
             (StreamWidthBox.Text == previous.Value.Width.ToString() &&
              StreamHeightBox.Text == previous.Value.Height.ToString());
-        var previousResolution = previous is null ? null :
-            $"{previous.Value.Width}x{previous.Value.Height}";
+        var previousResolution = _lastDefaultCameraSize is { } previousCamera
+            ? $"{previousCamera.Width}x{previousCamera.Height}" : null;
         var selectedResolution =
             (VirtualCameraResolutionBox.SelectedItem as ComboBoxItem)?.Tag as string;
         var updateVirtualCamera = force || previous is null ||
@@ -132,9 +139,10 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
             StreamWidthBox.Text = size.Width.ToString();
             StreamHeightBox.Text = size.Height.ToString();
         }
-        SelectVirtualCameraResolution(size.Width, size.Height,
+        SelectVirtualCameraResolution(cameraSize.Width, cameraSize.Height,
             updateVirtualCamera);
         _lastDefaultSize = size;
+        _lastDefaultCameraSize = cameraSize;
     }
 
     private void SelectVirtualCameraResolution(uint width, uint height,
@@ -179,16 +187,20 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
     private void UpdateStartButtons()
     {
         if (!IsLoaded) return;
-        if (_previewOnly)
-        {
-            StartRecordingButton.IsEnabled = false;
-            StartStreamingButton.IsEnabled = false;
-            return;
-        }
-        StartRecordingButton.IsEnabled = _viewModel.CanStartRecording &&
-            _viewModel.CanRecordMediaOutput;
-        StartStreamingButton.IsEnabled = _viewModel.CanStartStreaming &&
-            SelectedProtocolSupported();
+        var pendingRecording = _viewModel.CanDiscardRecording;
+        StartRecordingButton.SetResourceReference(ContentControl.ContentProperty,
+            _viewModel.IsRecordingMediaOutput ? "StopRecordingOnly" : pendingRecording ? "RecordSaveTitle" : "StartRecording");
+        StartStreamingButton.SetResourceReference(ContentControl.ContentProperty,
+            _viewModel.IsStreamingMediaOutput ? "StopStreamingOnly" : "StartStreaming");
+        StartVirtualCameraButton.SetResourceReference(ContentControl.ContentProperty,
+            _viewModel.IsVirtualCameraOutputRunning ? "StopVirtualCamera" : "StartVirtualCamera");
+        StartRecordingButton.IsEnabled = !_previewOnly && (_viewModel.IsRecordingMediaOutput
+            ? _viewModel.CanStopRecording : pendingRecording || _viewModel.CanStartRecording && _viewModel.CanRecordMediaOutput);
+        StartStreamingButton.IsEnabled = !_previewOnly && (_viewModel.IsStreamingMediaOutput
+            ? _viewModel.CanStopStreaming : _viewModel.CanStartStreaming && SelectedProtocolSupported());
+        StartVirtualCameraButton.IsEnabled = !_previewOnly && (_viewModel.IsVirtualCameraOutputRunning
+            ? _viewModel.CanStopVirtualCamera : _viewModel.CanUseVirtualCamera);
+        DiscardRecordingButton.Visibility = pendingRecording ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private bool SelectedProtocolSupported() => StreamProtocolBox.SelectedIndex switch
@@ -201,6 +213,18 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
 
     private async void OnStartRecordingClick(object sender, RoutedEventArgs e)
     {
+        if (_previewOnly || _viewModel.IsMediaOutputTransitioning) return;
+        if (_viewModel.IsRecordingMediaOutput)
+        {
+            await RunAsync(() => _viewModel.StopRecordingAsync());
+            await PromptToSaveRecordingAsync();
+            return;
+        }
+        if (_viewModel.PendingRecordingPath is not null)
+        {
+            await PromptToSaveRecordingAsync();
+            return;
+        }
         if (!TryReadOutputSettings(RecordWidthBox, RecordHeightBox, RecordFpsBox,
                 RecordBitrateBox, out var width, out var height, out var fps, out var bitrate))
             return;
@@ -211,6 +235,12 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
 
     private async void OnStartStreamingClick(object sender, RoutedEventArgs e)
     {
+        if (_previewOnly || _viewModel.IsMediaOutputTransitioning) return;
+        if (_viewModel.IsStreamingMediaOutput)
+        {
+            await RunAsync(() => _viewModel.StopStreamingAsync());
+            return;
+        }
         if (!TryReadOutputSettings(StreamWidthBox, StreamHeightBox, StreamFpsBox,
                 StreamBitrateBox, out var width, out var height, out var fps, out var bitrate))
             return;
@@ -247,7 +277,8 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
         catch (OperationCanceledException) when (_microphoneCancellation.IsCancellationRequested) { }
         catch (Exception error)
         {
-            SetFeedback(LocalizationService.Format("MicrophoneEnumerationFailed", error.Message), StatusTone.Error);
+            DiagnosticLogger.Exception("media_output", "microphone_refresh_failed", error);
+            SetFeedback(LocalizationService.ErrorMessage(error, "MicrophoneRefreshFailed"), StatusTone.Error);
         }
         finally
         {
@@ -259,6 +290,12 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
 
     private async void OnStartVirtualCameraClick(object sender, RoutedEventArgs e)
     {
+        if (_previewOnly || _viewModel.IsMediaOutputTransitioning) return;
+        if (_viewModel.IsVirtualCameraOutputRunning)
+        {
+            await RunAsync(() => _viewModel.StopVirtualCameraAsync());
+            return;
+        }
         if (VirtualCameraResolutionBox.SelectedItem is not ComboBoxItem
                 { Tag: string resolution } ||
             VirtualCameraFpsBox.SelectedItem is not ComboBoxItem
@@ -295,12 +332,6 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
         SetFeedback(result.Message, result.Success ? StatusTone.Success : StatusTone.Error);
     }
 
-    private async void OnStopClick(object sender, RoutedEventArgs e)
-    {
-        await RunAsync(() => _viewModel.StopMediaOutputAsync());
-        await PromptToSaveRecordingAsync();
-    }
-
     private void OnDiscardClick(object sender, RoutedEventArgs e)
     {
         if (_viewModel.PendingRecordingPath is null) return;
@@ -312,15 +343,6 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
         SetFeedback(LocalizationService.Get(discarded ? "RecordingDiscarded" : "RecordingDiscardFailed"),
             discarded ? StatusTone.Success : StatusTone.Error);
     }
-
-    private async void OnStopRecordingClick(object sender, RoutedEventArgs e)
-    {
-        await RunAsync(() => _viewModel.StopRecordingAsync());
-        await PromptToSaveRecordingAsync();
-    }
-
-    private async void OnStopStreamingClick(object sender, RoutedEventArgs e) =>
-        await RunAsync(() => _viewModel.StopStreamingAsync());
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 
@@ -368,8 +390,7 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
             {
                 DiagnosticLogger.Exception("recording", "save_failed", error,
                     ("file", Path.GetFileName(dialog.FileName)));
-                SetFeedback(LocalizationService.Format(
-                    "RecordingSaveFailedFormat", error.Message), StatusTone.Error);
+                SetFeedback(LocalizationService.Get("RecordingSaveRetry"), StatusTone.Error);
             }
         }
         finally { _savePromptOpen = false; }
@@ -387,7 +408,7 @@ public partial class MediaOutputSettingsWindow : IPhoneMirror.UI.Controls.Rounde
         catch (Exception error)
         {
             DiagnosticLogger.Exception("media_output", "settings_action_failed", error);
-            SetFeedback(error.Message, StatusTone.Error);
+            SetFeedback(LocalizationService.ErrorMessage(error, "MediaOutputOperationFailed"), StatusTone.Error);
         }
     }
 

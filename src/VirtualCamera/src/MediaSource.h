@@ -35,7 +35,7 @@ public:
                                    const wchar_t* channel_path,
                                    std::uint32_t output_width = 0,
                                    std::uint32_t output_height = 0,
-                                   std::uint32_t frame_rate = 30);
+                                   std::uint32_t frame_rate = 0);
 
     IFACEMETHODIMP BeginGetEvent(IMFAsyncCallback* callback,
                                 IUnknown* state) override;
@@ -68,6 +68,7 @@ private:
     HRESULT render_frame(IMFMediaBuffer* buffer, IMFMediaType* media_type,
                          std::stop_token stop_token);
     void process_sample_requests(std::stop_token stop_token) noexcept;
+    void collect_frames(std::stop_token stop_token) noexcept;
 
     std::mutex mutex_;
     std::mutex sample_allocator_mutex_;
@@ -80,10 +81,15 @@ private:
     Microsoft::WRL::ComPtr<IMFVideoSampleAllocator> allocator_;
     FrameReader reader_;
     FrameSnapshot last_frame_;
-    FrameSnapshot pending_frame_;
+    std::mutex frame_mutex_;
+    std::condition_variable_any frame_condition_;
+    std::deque<FrameSnapshot> frame_queue_;
+    std::deque<FrameSnapshot> recycled_frames_;
+    bool frame_buffer_started_{};
     std::vector<BYTE> rendered_frame_;
     std::deque<Microsoft::WRL::ComPtr<IUnknown>> sample_requests_;
     std::jthread sample_worker_;
+    std::jthread frame_worker_;
     std::wstring channel_path_;
     LONGLONG frame_duration_100ns_{10'000'000LL / 30};
     LONGLONG next_sample_time_{};

@@ -30,6 +30,12 @@ internal static partial class Program
         app.InitializeComponent();
         try
         {
+            if (ReviewCapture)
+            {
+                TestMappingWindows(app, output);
+                Console.WriteLine("Mapping window screenshot review completed; native input tests are excluded from capture mode.");
+                return 0;
+            }
             TestMappingConfiguration(output);
             TestMappingKeys();
             TestMappingCaptureTransactions();
@@ -344,7 +350,7 @@ internal static partial class Program
     private static void TestMappingWindows(App app, string output)
     {
         var languageMethod = typeof(LocalizationService).GetMethod("ApplyLanguage", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
-        foreach (var language in new[] { "zh-CN", "zh-HK", "zh-TW", "en-US" })
+        foreach (var language in ReviewCapture ? new[] { "zh-CN" } : new[] { "zh-CN", "zh-HK", "zh-TW", "en-US" })
         foreach (var theme in new[] { AppTheme.Light, AppTheme.Dark })
         {
             languageMethod.Invoke(null, [language, false, false]);

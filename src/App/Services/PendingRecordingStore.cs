@@ -39,6 +39,34 @@ internal static class PendingRecordingStore
             await destination.FlushAsync();
         }
         File.Delete(pendingPath);
+        File.Delete(pendingPath + ".finalized");
+    }
+
+    internal static string PrepareStagingPath(string completedPath)
+    {
+        var staging = CreateStagingPath(completedPath);
+        if (File.Exists(staging) && File.Exists(staging + ".finalized"))
+            throw new IOException($"Save the retained recording before recording again: {staging}");
+        File.Delete(staging + ".finalized");
+        File.Delete(staging);
+        return staging;
+    }
+
+    internal static string? ResolvePath(string? completedPath)
+    {
+        if (string.IsNullOrWhiteSpace(completedPath)) return null;
+        var staging = CreateStagingPath(completedPath);
+        if (File.Exists(staging) && File.Exists(staging + ".finalized")) return staging;
+        return File.Exists(completedPath) ? completedPath : null;
+    }
+
+    internal static void PublishFinalized(string stagingPath, string destination)
+    {
+        // A marker distinguishes a fully muxed file from an interrupted MP4.
+        // Keep it until the rename succeeds so a failed publish is recoverable.
+        File.WriteAllText(stagingPath + ".finalized", string.Empty);
+        File.Move(stagingPath, destination, overwrite: false);
+        File.Delete(stagingPath + ".finalized");
     }
 
     internal static string? FindLatest(string? directory = null)
@@ -50,8 +78,9 @@ internal static class PendingRecordingStore
             return new DirectoryInfo(directory)
                 .EnumerateFiles("*.mp4", SearchOption.TopDirectoryOnly)
                 .Where(file => file.Length > 0 &&
-                    !file.Name.EndsWith(PartialSuffix,
-                        StringComparison.OrdinalIgnoreCase))
+                    (!file.Name.EndsWith(PartialSuffix,
+                        StringComparison.OrdinalIgnoreCase) ||
+                     File.Exists(file.FullName + ".finalized")))
                 .OrderByDescending(file => file.LastWriteTimeUtc)
                 .Select(file => file.FullName)
                 .FirstOrDefault();

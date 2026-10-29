@@ -87,7 +87,7 @@ internal static partial class Program
             Check(((Button)conflict.FindName("CloseOtherInstancesButton")).IsEnabled, "Retry must be enabled after failure.");
             conflict.Close();
 
-            foreach (var culture in new[] { "zh-CN", "en-US", "zh-HK", "zh-TW" })
+            foreach (var culture in IPhoneMirror.UI.Services.SupportedUiCultures.All)
             {
                 SetLanguage(culture);
                 AuditFixType("Windows.ImageSettingsWindow").GetMethod("ShowDeveloperPreview", InteractionMembers)!.Invoke(null, [main]);
@@ -139,15 +139,15 @@ internal static partial class Program
                 var text = new TextBlock(); text.SetResourceReference(TextBlock.FontSizeProperty, "BodyFontSize");
                 var host = new Window { Content = text, Width = 200, Height = 100, ShowInTaskbar = false }; host.Show();
                 appearance.Invoke(null, [app, (double?)2, (bool?)false]);
-                Check(Math.Abs(text.FontSize - 26) < 0.01, "Open controls must react to text scaling.");
+                Check(Math.Abs(text.FontSize - 28) < 0.01, "Open controls must react to text scaling.");
                 var notes = (System.Windows.Documents.FlowDocument)AuditFixType("Updater.MarkdownFlowDocumentRenderer")
                     .GetMethod("Render", InteractionMembers)!.Invoke(null, ["# Release notes\n\nBody text\n\n```text\nCode example\n```"] )!;
                 host.Content = new FlowDocumentScrollViewer { Document = notes, IsToolBarVisible = false };
                 host.UpdateLayout();
-                Check(notes.FontSize == 26 && notes.LineHeight == 42 && notes.Blocks.FirstBlock.FontSize == 44 &&
-                      notes.Blocks.LastBlock.FontSize == 24, "Release-note body, headings and code must scale with system text.");
+                Check(notes.FontSize == 28 && notes.LineHeight == 42 && notes.Blocks.FirstBlock.FontSize == 32 &&
+                      notes.Blocks.LastBlock.FontSize == 26, "Release-note reading text must scale fully while headings retain a balanced hierarchy.");
                 appearance.Invoke(null, [app, (double?)1, (bool?)true]);
-                Check(notes.FontSize == 13 && notes.Blocks.FirstBlock.FontSize == 22,
+                Check(notes.FontSize == 14 && notes.Blocks.FirstBlock.FontSize == 22,
                     "Open release notes must update their text size without recreation.");
                 host.Content = text;
                 Check(((SolidColorBrush)app.FindResource("TextBrush")).Color == SystemColors.WindowTextColor, "High contrast foreground.");
@@ -163,7 +163,7 @@ internal static partial class Program
                 SaveWindowRender(host, Path.Combine(output, $"contrast-selection-{theme}.png"));
                 host.Content = text;
                 appearance.Invoke(null, [app, (double?)1, (bool?)false]);
-                Check(Math.Abs(text.FontSize - 13) < 0.01, "Text scaling must reset without compounding."); host.Close();
+                Check(Math.Abs(text.FontSize - 14) < 0.01, "Text scaling must reset without compounding."); host.Close();
             }
             appearance.Invoke(null, [app, (double?)2, (bool?)false]);
             var shortDialog = AuditFixWindow("TextInputWindow", main, "DeviceBindingRenameTitle", "DeviceBindingRenamePrompt", "Phone");

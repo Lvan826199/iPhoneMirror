@@ -27,6 +27,7 @@ struct FrameMetrics {
     DWORD length{};
     unsigned average{};
     BYTE maximum{};
+    std::uint64_t fingerprint{14695981039346656037ULL};
 };
 
 void print_hr(const char* operation, HRESULT result) {
@@ -66,6 +67,7 @@ FrameMetrics analyze_frame(IMFSample* sample, GUID subtype, UINT32 width,
                 metrics.pitch;
             for (UINT32 x = 0; x < width; x += 8U) {
                 const BYTE value = row[x];
+                metrics.fingerprint = (metrics.fingerprint ^ value) * 1099511628211ULL;
                 total += value;
                 metrics.maximum = std::max(metrics.maximum, value);
                 ++sampled;
@@ -80,6 +82,8 @@ FrameMetrics analyze_frame(IMFSample* sample, GUID subtype, UINT32 width,
                 metrics.pitch;
             for (UINT32 x = 0; x < width; x += 8U) {
                 const BYTE* pixel = row + x * 4U;
+                for (unsigned channel = 0; channel < 3; ++channel)
+                    metrics.fingerprint = (metrics.fingerprint ^ pixel[channel]) * 1099511628211ULL;
                 const BYTE value = std::max({pixel[0], pixel[1], pixel[2]});
                 total += value;
                 metrics.maximum = std::max(metrics.maximum, value);
@@ -218,6 +222,7 @@ int wmain(int argc, wchar_t** argv) {
         }
         GUID subtype{};
         UINT32 width{}, height{};
+        UINT32 rate_numerator{}, rate_denominator{};
         if (FAILED(hr = media_type->GetGUID(MF_MT_SUBTYPE, &subtype)) ||
             FAILED(hr = MFGetAttributeSize(media_type.Get(), MF_MT_FRAME_SIZE,
                                             &width, &height))) {
@@ -225,6 +230,8 @@ int wmain(int argc, wchar_t** argv) {
             source->Shutdown();
             break;
         }
+        MFGetAttributeRatio(media_type.Get(), MF_MT_FRAME_RATE,
+                            &rate_numerator, &rate_denominator);
 
         int samples{};
         int black_samples{};
@@ -232,6 +239,8 @@ int wmain(int argc, wchar_t** argv) {
         int current_black_run{};
         int longest_black_run{};
         int logged_black_samples{};
+        int analyzed_samples{}, changed_frames{};
+        std::uint64_t previous_fingerprint{};
         LONGLONG previous_timestamp = std::numeric_limits<LONGLONG>::min();
         LONGLONG longest_gap{};
         const auto started = std::chrono::steady_clock::now();
@@ -258,6 +267,13 @@ int wmain(int argc, wchar_t** argv) {
             previous_timestamp = timestamp;
             const auto metrics = analyze_frame(sample.Get(), subtype, width,
                                                height);
+            if (metrics.analyzed) {
+                if (analyzed_samples != 0 &&
+                    previous_fingerprint != metrics.fingerprint)
+                    ++changed_frames;
+                previous_fingerprint = metrics.fingerprint;
+                ++analyzed_samples;
+            }
             if (metrics.black) {
                 ++black_samples;
                 ++current_black_run;
@@ -292,12 +308,16 @@ int wmain(int argc, wchar_t** argv) {
             std::chrono::steady_clock::now() - started).count();
         std::printf("format=%s size=%ux%u samples=%d black=%d empty=%d "
                     "fps=%.2f longest_timestamp_gap_ms=%.2f "
-                    "longest_black_run=%d\n",
+                    "longest_black_run=%d negotiated_fps=%u/%u "
+                    "changed_frames=%d changed_fps=%.2f analyzed=%d\n",
                     subtype == MFVideoFormat_NV12 ? "NV12" :
                     subtype == MFVideoFormat_RGB32 ? "RGB32" : "other",
                     width, height, samples, black_samples, empty_samples,
                     elapsed > 0.0 ? samples / elapsed : 0.0,
-                    longest_gap / 10'000.0, longest_black_run);
+                    longest_gap / 10'000.0, longest_black_run,
+                    rate_numerator, rate_denominator, changed_frames,
+                    elapsed > 0.0 ? changed_frames / elapsed : 0.0,
+                    analyzed_samples);
         source->Shutdown();
         exit_code = FAILED(hr) || samples != requested_frames ||
                     black_samples != 0 ? 1 : 0;

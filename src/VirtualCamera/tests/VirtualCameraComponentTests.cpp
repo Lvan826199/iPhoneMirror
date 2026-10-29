@@ -64,6 +64,10 @@ void test_control_argument_validation() {
               "reject output height above the allocation limit");
         check(start_ex(nullptr, 1279, 720, 30) == invalid_argument,
               "reject odd output dimensions");
+        check(start_ex(nullptr, 3840, 3840, 60) == invalid_argument,
+              "portrait support retains the 4K pixel allocation limit");
+        check(valid_output_size(1088, 2340),
+              "accept the native iPhone portrait output size");
         check(start_ex(nullptr, 1280, 720, 61) == invalid_argument,
               "reject frame rates above the supported limit");
     }
@@ -83,7 +87,7 @@ ComPtr<Interface> event_unknown(IMFMediaEvent* event) {
 }
 
 bool sample_has_nonblack_luma(IMFSample* sample, UINT32 width,
-                              UINT32 height) {
+                              UINT32 height, BYTE* marker = nullptr) {
     if (sample == nullptr) return false;
     ComPtr<IMFMediaBuffer> buffer;
     if (FAILED(sample->GetBufferByIndex(0, &buffer))) return false;
@@ -106,6 +110,7 @@ bool sample_has_nonblack_luma(IMFSample* sample, UINT32 width,
         static_cast<std::uint64_t>(pitch) * height <= length;
     bool nonblack{};
     if (valid_layout) {
+        if (marker != nullptr) *marker = scanline[0];
         const std::array<UINT32, 3> rows{height / 4U, height / 2U,
                                          height * 3U / 4U};
         const std::array<UINT32, 3> columns{width / 4U, width / 2U,
@@ -121,8 +126,9 @@ bool sample_has_nonblack_luma(IMFSample* sample, UINT32 width,
     return nonblack;
 }
 
-void test_frame_exchange(FramePublisher& publisher) {
-    check_hr(publisher.open_for_current_user(), "open frame publisher");
+void test_frame_exchange(FramePublisher& publisher, UINT32 frame_rate = 60,
+                        UINT32 output_width = 0, UINT32 output_height = 0) {
+    check_hr(publisher.open_for_current_user(frame_rate, output_width, output_height), "open frame publisher");
     if (publisher.channel_path().empty()) return;
     check(publisher.channel_path().find(L"iPhoneMirror\\FrameChannels") !=
               std::wstring::npos,
@@ -130,6 +136,10 @@ void test_frame_exchange(FramePublisher& publisher) {
 
     FrameReader reader;
     check_hr(reader.open(publisher.channel_path().c_str()), "open frame reader");
+    check(reader.output_frame_rate() == frame_rate,
+          "read configured frame rate before any pixels are published");
+    check(reader.output_width() == output_width && reader.output_height() == output_height,
+          "read configured output size before any pixels are published");
     constexpr UINT32 width = 4;
     constexpr UINT32 height = 2;
     constexpr UINT32 stride = width * 4;
@@ -147,6 +157,8 @@ void test_frame_exchange(FramePublisher& publisher) {
     check(snapshot.timestamp_100ns == 123456, "preserve frame timestamp");
     check(snapshot.pixels == std::vector<std::uint8_t>(pixels.begin(), pixels.end()),
           "preserve frame pixels");
+    check(!reader.read(snapshot, snapshot.published_frames),
+          "unchanged publisher sequence avoids copying a duplicate full frame");
 }
 
 void test_frame_exchange_contention(FramePublisher& publisher) {
@@ -218,7 +230,8 @@ void test_frame_exchange_contention(FramePublisher& publisher) {
           "never expose a partially overwritten frame snapshot");
 }
 
-void test_media_source() {
+void test_media_source(UINT32 frame_rate = 60, UINT32 output_width = 0,
+                       UINT32 output_height = 0) {
     const auto dll_path = module_directory() / L"iPhoneMirror.VirtualCamera.dll";
     HMODULE module = LoadLibraryW(dll_path.c_str());
     check(module != nullptr, "load virtual camera DLL");
@@ -266,7 +279,27 @@ void test_media_source() {
         SUCCEEDED(descriptor->GetMediaTypeHandler(&handler)))
         check_hr(handler->GetMediaTypeCount(&media_type_count),
                  "read media type count");
-    check(media_type_count == 2, "stream exposes RGB32 landscape/portrait");
+    check(media_type_count == (output_width == 0 ? 2U : 1U),
+          "stream exposes configured size or default RGB32 landscape/portrait");
+    for (DWORD index = 0; index < media_type_count && handler != nullptr; ++index) {
+        ComPtr<IMFMediaType> type;
+        check_hr(handler->GetMediaTypeByIndex(index, &type),
+                 "read discovered media type");
+        UINT32 numerator{}, denominator{};
+        if (type != nullptr)
+            check_hr(MFGetAttributeRatio(type.Get(), MF_MT_FRAME_RATE,
+                                         &numerator, &denominator),
+                     "read discovered frame rate");
+        check(numerator == frame_rate && denominator == 1,
+              "discovery without activation attributes preserves selected fps");
+        if (output_width != 0 && type != nullptr) {
+            UINT32 width{}, height{};
+            check_hr(MFGetAttributeSize(type.Get(), MF_MT_FRAME_SIZE, &width, &height),
+                     "read discovered output size");
+            check(width == output_width && height == output_height,
+                  "discovery preserves native portrait size distinct from published pixels");
+        }
+    }
 
     PROPVARIANT start_position{};
     PropVariantInit(&start_position);
@@ -301,6 +334,12 @@ void test_media_source() {
     auto sample = stream_event == nullptr
         ? ComPtr<IMFSample>{} : event_unknown<IMFSample>(stream_event.Get());
     check(sample != nullptr, "sample event carries IMFSample");
+    LONGLONG duration{};
+    if (sample != nullptr)
+        check_hr(sample->GetSampleDuration(&duration),
+                 "read discovered sample duration");
+    check(duration == 10'000'000LL / frame_rate,
+          "discovered source delivers samples with selected fps duration");
     DWORD buffer_count{};
     if (sample != nullptr) sample->GetBufferCount(&buffer_count);
     check(buffer_count == 1, "sample contains one video buffer");
@@ -346,7 +385,7 @@ void test_media_source() {
 
 void test_configured_media_source(FramePublisher& publisher) {
     constexpr UINT32 published_width = 998;
-    constexpr UINT32 published_height = 2160;
+    constexpr UINT32 published_height = 2340;
     constexpr UINT32 published_stride = published_width * 4U;
     std::vector<std::uint8_t> published_pixels(
         static_cast<std::size_t>(published_stride) * published_height, 90);
@@ -373,7 +412,7 @@ void test_configured_media_source(FramePublisher& publisher) {
     if (activate != nullptr) {
         check_hr(activate->SetUINT32(OutputWidthAttribute, 998),
                   "set virtual camera output width");
-        check_hr(activate->SetUINT32(OutputHeightAttribute, 2160),
+        check_hr(activate->SetUINT32(OutputHeightAttribute, published_height),
                   "set virtual camera output height");
         check_hr(activate->SetUINT32(OutputFrameRateAttribute, 60),
                  "set virtual camera frame rate");
@@ -453,7 +492,7 @@ void test_configured_media_source(FramePublisher& publisher) {
                       range == MFNominalRange_0_255,
                   "configured virtual camera type declares full-range BT.709");
         }
-        check(width == 998 && height == 2160,
+        check(width == 998 && height == published_height,
               "configured media type uses the selected resolution");
         check(numerator == 60 && denominator == 1,
               "configured media type advertises 60 fps");
@@ -484,6 +523,24 @@ void test_configured_media_source(FramePublisher& publisher) {
     bool timestamps_are_monotonic = true;
     ComPtr<IMFSample> sample;
     std::vector<ComPtr<IMFSample>> held_samples;
+    std::atomic_bool publish_failed{};
+    std::jthread moving_publisher([&](std::stop_token token) {
+        auto next_frame = std::chrono::steady_clock::now();
+        for (int frame = 0; !token.stop_requested(); ++frame) {
+            std::fill(published_pixels.begin(), published_pixels.end(),
+                      static_cast<BYTE>(40 + frame % 160));
+            if (FAILED(publisher.publish(published_pixels.data(), published_width,
+                    published_height, published_stride, frame * (10'000'000LL / 60)))) {
+                publish_failed = true;
+                break;
+            }
+            next_frame += std::chrono::nanoseconds(1'000'000'000LL / 60);
+            std::this_thread::sleep_until(next_frame);
+        }
+    });
+    BYTE previous_marker{};
+    int changed_frames{};
+    const auto samples_started = std::chrono::steady_clock::now();
     for (int frame = 0; frame < stress_frames && stream != nullptr; ++frame) {
         check_hr(stream->RequestSample(nullptr),
                  "request allocator-backed configured media sample");
@@ -500,7 +557,7 @@ void test_configured_media_source(FramePublisher& publisher) {
             if (sample_buffer != nullptr) {
                 check_hr(sample_buffer->GetCurrentLength(&current_length),
                          "read allocator-backed sample length");
-                check(current_length == 998U * 2160U * 4U,
+                check(current_length == 998U * published_height * 4U,
                       "allocator-backed sample reports the tight media length");
             }
         }
@@ -516,14 +573,30 @@ void test_configured_media_source(FramePublisher& publisher) {
                     sample_time - previous_time >= duration;
             previous_time = sample_time;
         }
-        if (sample_has_nonblack_luma(sample.Get(), 998, 2160))
+        BYTE marker{};
+        if (sample_has_nonblack_luma(sample.Get(), 998, published_height, &marker))
             ++nonblack_frames;
+        if (frame != 0 && marker != previous_marker) ++changed_frames;
+        previous_marker = marker;
         held_samples.push_back(sample);
         if (held_samples.size() > 8U)
             held_samples.erase(held_samples.begin());
     }
     check(duration == 10'000'000LL / 60,
           "60 fps samples use the matching Media Foundation duration");
+    const auto elapsed = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - samples_started).count();
+    const auto delivered_fps = (stress_frames - 1) / elapsed;
+    const auto changed_fps = changed_frames / elapsed;
+    moving_publisher.request_stop();
+    moving_publisher.join();
+    check(!publish_failed, "publish every moving frame");
+    std::printf("Virtual camera allocator-backed delivery: %.2f fps, moving content: %.2f fps\n",
+                delivered_fps, changed_fps);
+    check(delivered_fps > 50,
+          "60 fps stream delivers more than 50 samples per second in wall time");
+    check(changed_fps > 50,
+          "60 fps stream preserves more than 50 distinct moving frames per second");
     check(timestamps_are_monotonic,
           "asynchronous samples use a monotonic non-overlapping timeline");
     check(nonblack_frames == stress_frames,
@@ -563,7 +636,14 @@ int wmain() {
     if (!publisher.channel_path().empty()) {
         test_frame_exchange_contention(publisher);
         test_media_source();
+        publisher.close();
+        test_frame_exchange(publisher, 30);
+        test_media_source(30);
+        // Explicit activation attributes must override a 30 fps channel.
         test_configured_media_source(publisher);
+        publisher.close();
+        test_frame_exchange(publisher, 60, 1088, 2340);
+        test_media_source(60, 1088, 2340);
     }
     publisher.close();
 

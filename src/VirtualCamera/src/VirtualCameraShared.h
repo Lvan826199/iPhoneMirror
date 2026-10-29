@@ -41,9 +41,16 @@ constexpr std::uint32_t FrameMagic = 0x4D564349; // ICVM
 constexpr std::uint16_t FrameVersion = 1;
 constexpr std::uint32_t FramePixelFormatBgra8 = 1;
 constexpr std::uint32_t MaximumFrameWidth = 3840;
-constexpr std::uint32_t MaximumFrameHeight = 2160;
+constexpr std::uint32_t MaximumFrameHeight = 3840;
 constexpr std::size_t MaximumFrameBytes =
-    static_cast<std::size_t>(MaximumFrameWidth) * MaximumFrameHeight * 4;
+    static_cast<std::size_t>(3840) * 2160 * 4;
+
+constexpr bool valid_output_size(std::uint32_t width, std::uint32_t height) {
+    return width >= 160 && width <= MaximumFrameWidth &&
+        height >= 160 && height <= MaximumFrameHeight &&
+        (width & 1U) == 0 && (height & 1U) == 0 &&
+        static_cast<std::uint64_t>(width) * height * 4 <= MaximumFrameBytes;
+}
 
 struct alignas(8) SharedFrameHeader {
     std::uint32_t magic;
@@ -56,7 +63,11 @@ struct alignas(8) SharedFrameHeader {
     std::uint32_t pixel_format;
     std::int64_t timestamp_100ns;
     std::uint32_t payload_size;
-    std::uint32_t reserved;
+    // Formerly reserved. Low 7 bits: fps; next 12: output width; next 12:
+    // output height. Dimensions remain distinct from the latest source frame.
+    // Zero dimensions support earlier rate-only publishers without resizing
+    // this header or its shared mapping.
+    std::uint32_t output_frame_rate;
     std::uint64_t published_frames;
 };
 

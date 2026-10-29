@@ -15,6 +15,8 @@ public sealed partial class BluetoothControlNoticeWindow :
 
     private static BluetoothControlNoticeWindow? _active;
     private const double WaitingWidth = 520;
+    private double ReadingWidth => WaitingWidth * (1 + .35 * Math.Max(0,
+        (TryFindResource("BodyFontSize") is double body ? body / 14 : 1) - 1));
     private readonly DispatcherTimer _closeTimer;
     private readonly bool _previewOnly;
     private NoticeState _state = NoticeState.Waiting;
@@ -278,12 +280,12 @@ public sealed partial class BluetoothControlNoticeWindow :
             return;
         }
         _state = state;
-        // Keep the original dialog width. When the pairing checklist hides,
+        // Keep the reading width for the current text size. When the pairing checklist hides,
         // remeasure only the height so the connected notice loses the empty
         // lower area instead of becoming a narrower dialog.
-        MinWidth = WaitingWidth;
-        MaxWidth = WaitingWidth;
-        Width = WaitingWidth;
+        MinWidth = ReadingWidth;
+        MaxWidth = ReadingWidth;
+        Width = ReadingWidth;
         _remainingSeconds = 5;
         _closeTimer.Stop();
         if (state == NoticeState.Connected)
@@ -349,8 +351,8 @@ public sealed partial class BluetoothControlNoticeWindow :
         // and set the outer height explicitly, so no stale lower area remains.
         SizeToContent = System.Windows.SizeToContent.Manual;
         var available = IPhoneMirror.SharedUI.Services.WindowWorkAreaController.GetAvailableSize(this);
-        MinWidth = Math.Min(WaitingWidth, available.Width);
-        MaxWidth = WaitingWidth;
+        MinWidth = Math.Min(ReadingWidth, available.Width);
+        MaxWidth = ReadingWidth;
         Width = MinWidth;
         MinHeight = 0;
         MaxHeight = available.Height;

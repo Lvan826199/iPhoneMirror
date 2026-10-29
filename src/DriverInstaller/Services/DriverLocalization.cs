@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Media;
 
 namespace IPhoneMirror.DriverInstaller.Services;
 
@@ -27,6 +28,7 @@ internal static class DriverLocalization
         CultureInfo.CurrentUICulture = Culture;
         CultureInfo.DefaultThreadCurrentCulture = Culture;
         CultureInfo.DefaultThreadCurrentUICulture = Culture;
+        ApplyInterfaceFontFamily();
     }
 
     internal static string Get(string key) =>
@@ -40,8 +42,20 @@ internal static class DriverLocalization
 
     internal static ResourceDictionary CreateDictionary() => new()
     {
-        Source = new Uri($"Localization/Strings.{Language}.xaml", UriKind.Relative),
+        Source = new Uri($"/{typeof(DriverLocalization).Assembly.GetName().Name};component/Localization/Strings.{Language}.xaml", UriKind.Relative),
     };
+
+    internal static void ApplyInterfaceFontFamily()
+    {
+        if (Application.Current is null) return;
+        var family = Language == Japanese
+            ? new FontFamily("Segoe UI, Yu Gothic UI")
+            : new FontFamily("Segoe UI, Microsoft YaHei UI");
+        foreach (var dictionary in Application.Current.Resources.MergedDictionaries)
+        {
+            if (dictionary.Contains("AppFontFamily")) dictionary["AppFontFamily"] = family;
+        }
+    }
 
 
     internal static string LocalizeOperationResult(string message)

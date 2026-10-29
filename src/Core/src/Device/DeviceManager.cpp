@@ -294,7 +294,8 @@ EnvironmentRecord DeviceManager::environment() const {
     return result;
 }
 
-std::vector<DeviceRecord> DeviceManager::refresh(bool refresh_metadata) {
+std::vector<DeviceRecord> DeviceManager::refresh(bool refresh_metadata,
+    const std::vector<std::string>& excluded_identities) {
     std::map<std::string, MuxDeviceRecord, std::less<>> devices;
     if (transport::Socket::probe_loopback(27015)) {
         try { list_devices_from_port(27015, devices); } catch (...) {}
@@ -325,11 +326,17 @@ std::vector<DeviceRecord> DeviceManager::refresh(bool refresh_metadata) {
             item.record = make_presence_record(source);
             const auto cached = metadata_cache_.find(serial);
             item.had_cache = cached != metadata_cache_.end();
+            auto identity = serial;
+            std::transform(identity.begin(), identity.end(), identity.begin(),
+                [](unsigned char c) { return c >= 'A' && c <= 'Z'
+                    ? static_cast<char>(c - 'A' + 'a') : static_cast<char>(c); });
+            const auto excluded = std::find(excluded_identities.begin(),
+                excluded_identities.end(), identity) != excluded_identities.end();
             item.metadata_needed = detail::needs_device_metadata_refresh(
                 refresh_metadata, item.record,
-                item.had_cache ? &cached->second : nullptr);
+                item.had_cache ? &cached->second : nullptr, excluded);
             if (item.had_cache) item.cached_snapshot = cached->second;
-            if (!item.metadata_needed)
+            if (!item.metadata_needed && item.had_cache)
                 apply_cached_metadata(item.record, item.cached_snapshot);
             work.push_back(std::move(item));
         }

@@ -7,6 +7,7 @@
 #include "Capture/WirelessCaptureSession.h"
 #include "Capture/WirelessReceiverHub.h"
 #include "Logging.h"
+#include "Media/SdrBgraConverter.h"
 #include "Renderer/D3D11PreviewRenderer.h"
 #include "Transport/LibUsb0Readiness.h"
 #include "Transport/Socket.h"
@@ -266,6 +267,8 @@ bool nv12_to_bgra(const iPhoneMirror::media::DecodedFrame& frame, std::uint8_t* 
     const auto* uv_plane = y_plane + y_bytes;
     const auto conversion = iPhoneMirror::media::detail::yuv_conversion_parameters(
         frame.pixel_format, frame.color.range, frame.color.matrix);
+    const bool fast_sdr = iPhoneMirror::media::detail::SdrBgraConverter::supports(frame);
+    const iPhoneMirror::media::detail::SdrBgraConverter sdr(frame);
     // The MFT reports a 2622-line visible picture in a 2624-line allocation.
     // The extra rows are allocation padding at the end, not a visible prefix.
     // The old black-row heuristic could crop legitimate dark status bars.
@@ -280,6 +283,10 @@ bool nv12_to_bgra(const iPhoneMirror::media::DecodedFrame& frame, std::uint8_t* 
         }
         const auto* luma = y_plane + static_cast<std::size_t>(source_y) * source_stride;
         const auto* chroma = uv_plane + static_cast<std::size_t>(source_y / 2U) * source_stride;
+        if (fast_sdr) {
+            sdr.row(luma, chroma, destination, frame.width);
+            continue;
+        }
         for (std::uint32_t x = 0; x < frame.width; ++x) {
             const auto chroma_component = static_cast<std::size_t>(x / 2U) * 2U;
             const auto rgb = iPhoneMirror::media::detail::convert_yuv_to_sdr(
@@ -321,6 +328,8 @@ bool nv12_to_bgra(const iPhoneMirror::media::DecodedFrame& frame, std::uint8_t* 
 
 bool nv12_to_bgra_scaled(const iPhoneMirror::media::DecodedFrame& frame,
     std::uint8_t* output, std::uint32_t output_width, std::uint32_t output_height) {
+    if (output_width == frame.width && output_height == frame.height)
+        return nv12_to_bgra(frame, output);
     if (frame.nv12.empty() && frame.gpu_frame) {
         auto materialized = frame;
         if (!iPhoneMirror::media::detail::materialize_gpu_frame(materialized)) return false;
@@ -341,6 +350,8 @@ bool nv12_to_bgra_scaled(const iPhoneMirror::media::DecodedFrame& frame,
     const auto* uv_plane = y_plane + y_bytes;
     const auto conversion = iPhoneMirror::media::detail::yuv_conversion_parameters(
         frame.pixel_format, frame.color.range, frame.color.matrix);
+    const bool fast_sdr = iPhoneMirror::media::detail::SdrBgraConverter::supports(frame);
+    const iPhoneMirror::media::detail::SdrBgraConverter sdr(frame);
 
     constexpr std::uint32_t leading_padding_rows = 0;
 
@@ -381,6 +392,10 @@ bool nv12_to_bgra_scaled(const iPhoneMirror::media::DecodedFrame& frame,
         const auto source_y = y_map[y];
         const auto* luma = y_plane + static_cast<std::size_t>(source_y) * source_stride;
         const auto* chroma = uv_plane + static_cast<std::size_t>(source_y / 2U) * source_stride;
+        if (fast_sdr) {
+            sdr.row(luma, chroma, destination, output_width, x_map);
+            continue;
+        }
         for (std::uint32_t x = 0; x < output_width; ++x) {
             const auto source_x = x_map[x];
             const auto chroma_component = static_cast<std::size_t>(source_x / 2U) * 2U;
@@ -653,7 +668,14 @@ std::int32_t IM_CALL im_refresh_devices_ex(iPhoneMirror::DeviceInfo* devices,
     try {
         const auto started = std::chrono::steady_clock::now();
         if (!devices || !device_refresh_snapshot_valid) {
-            device_refresh_snapshot = device_manager.refresh(refresh_metadata != 0);
+            std::vector<std::string> active_wired_identities;
+            {
+                std::scoped_lock lock(state_mutex);
+                active_wired_identities.assign(wired_session_reservations.begin(),
+                    wired_session_reservations.end());
+            }
+            device_refresh_snapshot = device_manager.refresh(refresh_metadata != 0,
+                active_wired_identities);
             device_refresh_snapshot_valid = true;
             std::scoped_lock metadata_lock(device_metadata_mutex);
             for (const auto& record : device_refresh_snapshot) {
@@ -836,7 +858,8 @@ std::int32_t IM_CALL im_media_cast_receiver_get_status(
         receiver = wireless_receiver;
     }
     *running = receiver && receiver->running() ? 1 : 0;
-    *ready = receiver && receiver->ready() ? 1 : 0;
+    // 2 means AirPlay is ready but DLNA is recovering independently.
+    *ready = receiver && receiver->ready() ? (receiver->dlna_failed() ? 2 : 1) : 0;
     last_error.clear();
     return static_cast<std::int32_t>(iPhoneMirror::Result::Ok);
 }

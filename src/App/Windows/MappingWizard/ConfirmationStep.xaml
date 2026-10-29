@@ -3,7 +3,7 @@
  <Border Style="{StaticResource CardBorder}" Padding="24" MaxWidth="420" VerticalAlignment="Center">
   <StackPanel>
    <TextBlock Text="{DynamicResource MappingKey}" Style="{StaticResource CaptionText}"/>
-   <TextBlock Text="{Binding KeyText}" FontSize="28" FontWeight="SemiBold" Margin="0,4,0,20" TextWrapping="Wrap"/>
+   <TextBlock Text="{Binding KeyText}" FontSize="{DynamicResource FontSize28}" FontWeight="SemiBold" Margin="0,4,0,20" TextWrapping="Wrap"/>
    <TextBlock Text="{DynamicResource MappingAction}" Style="{StaticResource CaptionText}"/>
    <TextBlock Text="{Binding ActionText}" Style="{StaticResource BodyText}" FontWeight="SemiBold" Margin="0,4,0,4"/>
    <TextBlock Text="{Binding ParameterText}" Style="{StaticResource SecondaryText}"/>

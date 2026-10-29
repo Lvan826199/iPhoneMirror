@@ -162,8 +162,10 @@ public partial class KeyboardMappingEditorWindow : IPhoneMirror.UI.Controls.Roun
             var mark = new TextBlock { Text = current ? "●" : complete ? "✓" : "○", FontSize = 18, TextAlignment = TextAlignment.Center };
             mark.SetResourceReference(TextBlock.ForegroundProperty, current ? "AccentBrush" : "MutedTextBrush");
             panel.Children.Add(mark);
-            panel.Children.Add(new TextBlock { Text = label, FontSize = 11, TextAlignment = TextAlignment.Center,
-                FontWeight = current ? FontWeights.SemiBold : FontWeights.Normal, Margin = new Thickness(0, 4, 0, 0) });
+            var caption = new TextBlock { Text = label, TextAlignment = TextAlignment.Center,
+                FontWeight = current ? FontWeights.SemiBold : FontWeights.Normal, Margin = new Thickness(0, 4, 0, 0) };
+            caption.SetResourceReference(TextBlock.FontSizeProperty, "CaptionFontSize");
+            panel.Children.Add(caption);
             var button = new Button { Content = panel, Padding = new Thickness(4), IsEnabled = Wizard.CanVisit(step), Focusable = !current,
                 Background = Brushes.Transparent, BorderBrush = Brushes.Transparent };
             button.SetResourceReference(StyleProperty, "GhostButton");
@@ -179,7 +181,10 @@ public partial class KeyboardMappingEditorWindow : IPhoneMirror.UI.Controls.Roun
         StepIndicator.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         StepNumberText.Visibility = StepTitle.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         StepHeading.Margin = new Thickness(0, 0, 0, compact ? 12 : 24);
-        StepPage.Height = Math.Max(300, StepScroller.ActualHeight - 24);
+        // Center short steps, but let enlarged text grow beyond the viewport.
+        // A fixed page height clips the centered step before scrolling can help.
+        StepPage.Height = double.NaN;
+        StepPage.MinHeight = Math.Max(300, StepScroller.ActualHeight - 24);
     }
     private void EnterStep()
     {

@@ -826,9 +826,25 @@ internal sealed class AppleSupportInstaller(DeviceCatalog catalog)
     private static async Task<ProcessResult> RunMsiAsync(string msi, string packageHash,
         string logPath, string operationId)
     {
-        string[] arguments = ["/i", msi, "/quiet", "/norestart", "/l*v", logPath];
-        return await RunElevatedAsync(Path.Combine(Environment.SystemDirectory, "msiexec.exe"),
-            arguments, TimeSpan.FromMinutes(15), operationId, "msiexec", msi, packageHash);
+        return await RunMsiWithLogFallbackAsync(msi, logPath, async arguments =>
+            await RunElevatedAsync(Path.Combine(Environment.SystemDirectory, "msiexec.exe"),
+                arguments, TimeSpan.FromMinutes(15), operationId, "msiexec", msi, packageHash),
+            () => DriverLogger.WriteWarning("apple-support", "msi_log_unavailable_retry",
+                ("operation", operationId), ("log", DriverLogger.DescribePath(logPath))));
+    }
+
+    // MSI 1622 means the service could not open the requested verbose log;
+    // installation has not begun. Retry once without that optional log. The
+    // production delegate still validates and locks the signed package for
+    // each attempt, and driver-ui.log records both exit codes.
+    internal static async Task<ProcessResult> RunMsiWithLogFallbackAsync(string msi,
+        string logPath, Func<IReadOnlyList<string>, Task<ProcessResult>> run,
+        Action logUnavailable)
+    {
+        var result = await run(["/i", msi, "/quiet", "/norestart", "/l*v", logPath]);
+        if (result.ExitCode != 1622) return result;
+        logUnavailable();
+        return await run(["/i", msi, "/quiet", "/norestart"]);
     }
 
     private static bool IsInstallerSuccess(int exitCode) => exitCode is 0 or 1641 or 3010;

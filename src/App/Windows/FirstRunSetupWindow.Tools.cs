@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -44,7 +44,7 @@ public partial class FirstRunSetupWindow
         title.FontWeight = FontWeights.SemiBold; title.Margin = new(0, 0, 0, 8);
         content.Children.Add(title);
         var detail = Text(driver ? "SetupToolsDriverHint" : "SetupToolsBindingHint", 13);
-        detail.LineHeight = 21; detail.Margin = new(0, 0, 0, 18);
+        detail.SetResourceReference(TextBlock.LineHeightProperty, "ReleaseNotesLineHeight"); detail.Margin = new(0, 0, 0, 18);
         detail.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
         content.Children.Add(detail);
         var action = Text("SetupToolsOpen", 13); action.Margin = new(0);

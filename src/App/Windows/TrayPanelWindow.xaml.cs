@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using IPhoneMirror.App.Localization;
 using IPhoneMirror.App.Models;
+using IPhoneMirror.App.Services;
 using IPhoneMirror.App.ViewModels;
 
 namespace IPhoneMirror.App.Windows;
@@ -85,7 +86,11 @@ public partial class TrayPanelWindow : IPhoneMirror.UI.Controls.RoundedWindow
             FeedbackText.Visibility = Visibility.Collapsed;
             Hide();
         }
-        catch (Exception error) { ReportError(error.Message); }
+        catch (Exception error)
+        {
+            DiagnosticLogger.Exception("tray", "start_failed", error);
+            ReportError(LocalizationService.ErrorMessage(error, "TrayStartFailed"));
+        }
         finally { _busy = false; UpdateActions(); }
     }
 
@@ -95,7 +100,11 @@ public partial class TrayPanelWindow : IPhoneMirror.UI.Controls.RoundedWindow
         _busy = true;
         UpdateActions();
         try { await _viewModel.RefreshAsync(forceDeviceEnumeration: true); }
-        catch (Exception error) { ReportError(error.Message); }
+        catch (Exception error)
+        {
+            DiagnosticLogger.Exception("tray", "refresh_failed", error);
+            ReportError(LocalizationService.ErrorMessage(error, "TrayRefreshFailed"));
+        }
         finally { _busy = false; UpdateActions(); }
     }
 

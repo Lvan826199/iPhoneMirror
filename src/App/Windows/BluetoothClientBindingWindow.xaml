@@ -90,7 +90,7 @@
                                 <TextBlock TextWrapping="Wrap" Text="{Binding BindingText}" Foreground="{DynamicResource SuccessBrush}"
                                            FontSize="{DynamicResource CaptionFontSize}" Margin="0,3,0,0">
                                 <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource BodyText}">
                                         <Setter Property="Visibility" Value="Collapsed"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsBound}" Value="True">

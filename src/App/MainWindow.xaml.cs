@@ -2148,10 +2148,10 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         {
             LeftGapColumn.Width = new GridLength(showLeftPanel ? 18 : 0);
             RightGapColumn.Width = new GridLength(showSettings ? 18 : 0);
-            SetWorkspaceSurfaceImmediate(LeftPanelHost, showLeftPanel, 300);
+            SetWorkspaceSurfaceImmediate(LeftPanelHost, showLeftPanel, WorkspaceDeviceWidth);
             SetWorkspacePageImmediate(DevicePanel, showDevices);
             SetWorkspacePageImmediate(MirroringPanel, showMirroring);
-            SetWorkspaceSurfaceImmediate(ControlPanel, showSettings, 336);
+            SetWorkspaceSurfaceImmediate(ControlPanel, showSettings, WorkspaceSettingsWidth);
             ReleaseLightweightCenterWidth();
             if (_viewModel.IsLightweightApplicationMode && IsVisible)
                 QueueInitialLightweightWorkspaceFit();
@@ -2192,9 +2192,9 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             : currentCenterWidth;
 
         _workspaceLeftSurfaceStartWidth = currentLeftWidth;
-        _workspaceLeftSurfaceTargetWidth = showLeftPanel ? 300 : 0;
+        _workspaceLeftSurfaceTargetWidth = showLeftPanel ? WorkspaceDeviceWidth : 0;
         _workspaceRightSurfaceStartWidth = currentRightWidth;
-        _workspaceRightSurfaceTargetWidth = showSettings ? 336 : 0;
+        _workspaceRightSurfaceTargetWidth = showSettings ? WorkspaceSettingsWidth : 0;
         _workspaceLeftGapStartWidth = currentLeftGap;
         _workspaceLeftGapTargetWidth = showLeftPanel ? 18 : 0;
         _workspaceRightGapStartWidth = currentRightGap;
@@ -2356,8 +2356,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         var hasPanels = showLeftPanel || showSettings;
         DeviceColumn.Width = GridLength.Auto;
         ControlColumn.Width = GridLength.Auto;
-        SetWorkspaceSurfaceImmediate(LeftPanelHost, showLeftPanel, 300);
-        SetWorkspaceSurfaceImmediate(ControlPanel, showSettings, 336);
+        SetWorkspaceSurfaceImmediate(LeftPanelHost, showLeftPanel, WorkspaceDeviceWidth);
+        SetWorkspaceSurfaceImmediate(ControlPanel, showSettings, WorkspaceSettingsWidth);
         LeftGapColumn.Width = new GridLength(showLeftPanel ? 18 : 0);
         RightGapColumn.Width = new GridLength(showSettings ? 18 : 0);
         SetLightweightCenterColumnFill();
@@ -2367,8 +2367,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         var scale = (dpi == 0 ? 96d : dpi) / 96d;
         var currentWindowWidth = Math.Max(1, bounds.Right - bounds.Left) / scale;
         var chromeWidth = GetLightweightFixedChromeWidth(currentWindowWidth);
-        var sideWidth = (showLeftPanel ? 318 : 0) +
-            (showSettings ? 354 : 0);
+        var sideWidth = (showLeftPanel ? WorkspaceDeviceWidth + 18 : 0) +
+            (showSettings ? WorkspaceSettingsWidth + 18 : 0);
         var maximumWindowWidth = GetLightweightMaximumWindowWidth();
         var maximumPreviewWidth = Math.Max(1, maximumWindowWidth - chromeWidth -
             sideWidth);
@@ -3402,6 +3402,13 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         }
         if (_mediaHlsBridge is not null)
         {
+            if (!_mediaHlsBridge.ExitedSuccessfully)
+            {
+                RememberImplicitMediaProgress(endedPosition);
+                ShowMediaCastStatus("MediaCastLoadingVideo");
+                QueueLiveMediaRecovery("HLS bridge exited with an error");
+                return;
+            }
             // The bridge has reached the actual end of the HLS output. This
             // is the only EOF that should be allowed to trigger next-episode
             // handling; a MediaElement segment EOF never reaches this branch.
@@ -6003,8 +6010,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         var showLeftPanel = _leftWorkspacePanel != LeftWorkspacePanel.None;
         var showSettings = _isSettingsPanelVisible;
         if (!showLeftPanel && !showSettings) return false;
-        var targetSideWidth = (showLeftPanel ? 318 : 0) +
-            (showSettings ? 354 : 0);
+        var targetSideWidth = (showLeftPanel ? WorkspaceDeviceWidth + 18 : 0) +
+            (showSettings ? WorkspaceSettingsWidth + 18 : 0);
         var chromeWidth = GetLightweightFixedChromeWidth(
             GetLightweightCurrentWindowWidth());
         return GetLightweightMaximumWindowWidth() >= chromeWidth +
@@ -6495,10 +6502,10 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             SizeToContent = SizeToContent.Manual;
             PreviewPanel.ClearValue(WidthProperty);
             SetNavigationPaneVisible(false);
-            SetWorkspaceSurfaceImmediate(LeftPanelHost, visible: false, width: 300);
+            SetWorkspaceSurfaceImmediate(LeftPanelHost, visible: false, width: WorkspaceDeviceWidth);
             SetWorkspacePageImmediate(DevicePanel, visible: false);
             SetWorkspacePageImmediate(MirroringPanel, visible: false);
-            SetWorkspaceSurfaceImmediate(ControlPanel, visible: false, width: 336);
+            SetWorkspaceSurfaceImmediate(ControlPanel, visible: false, width: WorkspaceSettingsWidth);
             HeaderPanel.Visibility = Visibility.Collapsed;
             EnvironmentPanel.Visibility = Visibility.Collapsed;
             StatsPanel.Visibility = Visibility.Collapsed;

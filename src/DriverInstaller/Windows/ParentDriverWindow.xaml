@@ -31,6 +31,7 @@
                     <ListBox ItemsSource="{Binding Choices}" SelectedItem="{Binding SelectedDriver}" Height="150" Margin="0,8,0,0"
                              Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource SelectableListItem}"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.CanContentScroll="False"
                              AutomationProperties.Name="{DynamicResource ParentDriverSelection}">
                         <ListBox.ItemTemplate>
                             <DataTemplate><TextBlock Text="{Binding DisplayText}" FontSize="{DynamicResource BodyFontSize}" TextWrapping="Wrap"/></DataTemplate>

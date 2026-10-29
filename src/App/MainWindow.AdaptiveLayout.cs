@@ -8,6 +8,9 @@ public partial class MainWindow
     private bool _workspacePanelsStacked;
     private bool _retainWorkspaceStackDuringTransition;
     private bool? _workspaceCompactHeader, _workspaceShortHeader;
+    private double WorkspaceReadingScale => TryFindResource("BodyFontSize") is double size ? size / 14 : 1;
+    private double WorkspaceDeviceWidth => 300 * (1 + .5 * (WorkspaceReadingScale - 1));
+    private double WorkspaceSettingsWidth => 336 * (1 + .5 * (WorkspaceReadingScale - 1));
 
     private void OnIdleSurfaceSizeChanged(object sender, SizeChangedEventArgs e)
     {
@@ -51,8 +54,15 @@ public partial class MainWindow
     private void OnWorkspaceLayoutChanged(object sender, RoutedEventArgs e)
     {
         if (!IsLoaded || MainContentGrid is null || ControlPanel is null) return;
+        LeftPanelHost.ContentWidth = WorkspaceDeviceWidth;
+        ControlPanel.ContentWidth = WorkspaceSettingsWidth;
+        if (_workspaceTransition?.IsRunning != true)
+        {
+            if (LeftPanelHost.Visibility == Visibility.Visible) LeftPanelHost.Width = WorkspaceDeviceWidth;
+            if (ControlPanel.Visibility == Visibility.Visible) ControlPanel.Width = WorkspaceSettingsWidth;
+        }
         UpdateStatisticsLayout();
-        var compactHeader = !_viewModel.IsLightweightApplicationMode && RootLayout.ActualWidth < 1100;
+        var compactHeader = !_viewModel.IsLightweightApplicationMode && RootLayout.ActualWidth < 1100 * (1 + .35 * (WorkspaceReadingScale - 1));
         // The shell already exposes the app title. In a very short work area,
         // reserve the in-window heading's space for the preview and controls.
         var shortHeader = compactHeader && RootLayout.ActualHeight < 480;
@@ -70,7 +80,7 @@ public partial class MainWindow
             CaptureActionButton.Margin = compactHeader && !shortHeader ? new Thickness(0, 8, 0, 0) : new Thickness(0);
         }
         var stack = !_viewModel.IsLightweightApplicationMode &&
-            MainContentGrid.ActualWidth < 960 &&
+            MainContentGrid.ActualWidth < WorkspaceDeviceWidth + WorkspaceSettingsWidth + 324 &&
             ((_leftWorkspacePanel != LeftWorkspacePanel.None && _isSettingsPanelVisible) ||
              _retainWorkspaceStackDuringTransition);
         if (stack == _workspacePanelsStacked) return;

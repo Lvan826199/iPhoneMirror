@@ -930,6 +930,7 @@ void WirelessReceiverHub::handle_message(const wireless::MessageHeader& header,
     const std::vector<std::uint8_t>& payload) {
     switch (header.type) {
     case wireless::MessageType::Ready:
+        dlna_failed_.store((header.reserved & wireless::ReadyDlnaFailed) != 0);
         ready_.store(true, std::memory_order_release);
         logging::write("wireless_hub ready");
         break;

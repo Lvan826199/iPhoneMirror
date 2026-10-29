@@ -1097,6 +1097,9 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         _mediaOutput.IsRunning || _virtualCamera.IsRunning;
     public bool IsMediaOutputTransitioning => _isMediaOutputTransitioning;
     public bool IsRecordingMediaOutput => _mediaOutput.IsRecording;
+    public bool IsStreamingMediaOutput => _mediaOutput.IsStreaming;
+    public bool IsVirtualCameraOutputRunning => _virtualCamera.IsRunning;
+    public bool CanStopVirtualCamera => IsVirtualCameraOutputRunning && !IsMediaOutputTransitioning;
     public bool CanStopRecording => IsRecordingMediaOutput && !IsMediaOutputTransitioning;
     public bool CanStopStreaming => _mediaOutput.IsStreaming && !IsMediaOutputTransitioning;
     private ulong SelectedOutputSessionHandle => IsMediaCasting && IsMediaCastSelected
@@ -1107,6 +1110,7 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
     public bool CanStartStreaming => CanStartMediaOutput &&
         _mediaOutput.CanStart(MediaOutputKind.Rtmp, SelectedOutputSessionHandle);
     public bool CanStopMediaOutput => IsMediaOutputRunning && !IsMediaOutputTransitioning;
+    public bool CanDiscardRecording => !IsRecordingMediaOutput && PendingRecordingPath is not null && !IsMediaOutputTransitioning;
     public bool CanStartMediaOutput => (CurrentSessionHandle != 0 ||
         (IsMediaCasting && IsMediaCastSelected &&
          _mediaCastNv12FrameProvider is not null)) &&
@@ -1114,8 +1118,7 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         !(_mediaOutput.IsRecording && _mediaOutput.IsStreaming) &&
         !IsMediaOutputTransitioning;
     internal string? PendingRecordingPath =>
-        !string.IsNullOrWhiteSpace(_pendingRecordingPath) &&
-        File.Exists(_pendingRecordingPath) ? _pendingRecordingPath : null;
+        PendingRecordingStore.ResolvePath(_pendingRecordingPath);
     public bool CanRecordMediaOutput =>
         _mediaOutputCapabilities.Supports(MediaOutputKind.Recording);
     public bool CanStreamRtmp =>
@@ -1147,7 +1150,7 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
          _virtualCameraCapabilities.UpdateRequired)
             ? Visibility.Visible : Visibility.Collapsed;
     public Visibility VirtualCameraStartVisibility =>
-        _virtualCameraCapabilities.Registered &&
+        IsVirtualCameraOutputRunning || _virtualCameraCapabilities.Registered &&
         !_virtualCameraCapabilities.UpdateRequired
             ? Visibility.Visible : Visibility.Collapsed;
     public Visibility VirtualCameraUninstallVisibility =>
@@ -1250,7 +1253,9 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
             CreateMediaOutputService(), CreateMediaOutputService());
         _mediaOutput.StatusChanged += OnMediaOutputStatusChanged;
         _pendingRecordingPath = PendingRecordingStore.FindLatest();
-        _virtualCamera = new VirtualCameraService(GetOutputVideoFrame);
+        _virtualCamera = new VirtualCameraService(GetOutputVideoFrame,
+            handle => handle == MediaCastOutputHandle ? null :
+                _core.GetDeviceSessionLatestFrameTimestamp(FindSessionHandleByRaw(handle)));
         _virtualCamera.StatusChanged += OnMediaOutputStatusChanged;
         _sessions.SessionHandleChanged += (udid, handle) =>
         {
@@ -2614,8 +2619,11 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         }
         catch (Exception error)
         {
-            if (ReferenceEquals(control.WiredBridge, bridge)) control.WiredBridge = null;
-            try { await bridge.DisposeAsync(); }
+            try
+            {
+                await bridge.DisposeAsync();
+                if (ReferenceEquals(control.WiredBridge, bridge)) control.WiredBridge = null;
+            }
             catch (Exception cleanupError)
             {
                 DiagnosticLogger.ReverseControlError("usb", "startup_cleanup_failed",
@@ -2781,9 +2789,7 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
                     NotifyUsbControlStateChanged();
                     if (!control.Starting)
                     {
-                        control.WiredBridge = null;
-                        control.WiredTarget = null;
-                        _ = DisposeFailedUsbBridgeAsync(bridge);
+                        _ = DisposeFailedUsbBridgeAsync(control, bridge);
                         ShowDeviceControlError(control, LocalizationService.Get("ReverseControlTransportWired"),
                             recoveryMessage, "ReverseControlRecoveryErrorTitle",
                             $"{bridgeEvent.Code}: {bridgeEvent.Message}");
@@ -2804,15 +2810,31 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         };
     }
 
-    private static async Task DisposeFailedUsbBridgeAsync(UsbTouchBridgeHost bridge)
+    private Task DisposeFailedUsbBridgeAsync(DeviceControlSession control,
+        UsbTouchBridgeHost bridge) => control.StopOperation.RunAsync(async _ =>
     {
-        try { await bridge.DisposeAsync(); }
+        control.Stopping = true;
+        NotifyUsbControlStateChanged();
+        try
+        {
+            await bridge.DisposeAsync();
+            if (ReferenceEquals(control.WiredBridge, bridge))
+            {
+                control.WiredBridge = null;
+                control.WiredTarget = null;
+            }
+        }
         catch (Exception error)
         {
             DiagnosticLogger.ReverseControlError("usb", "failed_bridge_cleanup_failed",
                 ("error", AppLog.Error(error)));
         }
-    }
+        finally
+        {
+            control.Stopping = false;
+            NotifyUsbControlStateChanged();
+        }
+    });
 
     private static string GetUsbControlFailureMessage(Exception error,
         UsbTouchBridgeHost bridge, bool wireless = false)
@@ -3139,8 +3161,8 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
             // complete. Never dispose a bridge while StartAsync is using it.
             await control.WiredOperation.CancelAsync();
             var bridge = control.WiredBridge;
-            control.WiredBridge = null;
             if (bridge is not null) await bridge.DisposeAsync();
+            control.WiredBridge = null;
             control.Status = LocalizationService.Get("ReverseControlUsbOff");
             AddDiagnosticLog(AppLog.Event("usb_control_disabled"));
             DiagnosticLogger.ReverseControl("usb", "stop_complete");
@@ -3159,7 +3181,7 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         }
         finally
         {
-            control.WiredTarget = null;
+            if (control.WiredBridge is null) control.WiredTarget = null;
             control.Stopping = false;
             OnPropertyChanged(nameof(UsbControlActionText));
             NotifyUsbControlStateChanged();
@@ -3642,7 +3664,8 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
             // A live wired session already owns a stable native handle. The
             // periodic inventory pass still reconciles wireless devices, but
             // must not reopen usbmux and introduce a visible preview hitch.
-            if (!forceDeviceEnumeration && wiredStates.Any(state => state.HasSession))
+            if (!forceDeviceEnumeration && !_usbRestoreRecovery.HasBlockedDevices &&
+                wiredStates.Any(state => state.HasSession))
                 enumerateWired = false;
             var refreshWiredMetadata = UsbDeviceRefreshPolicy.ShouldRefreshMetadata(
                 forceDeviceEnumeration || _usbRestoreRecovery.HasBlockedDevices,
@@ -3895,11 +3918,29 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
             }
             finally
             {
-                try { if (!process.HasExited) process.Kill(true); }
-                catch (Exception ex) { DiagnosticLogger.ExceptionOnce($"kill-bridge-{process.Id}", "wifi_sync", "kill_bridge_failed", ex); }
-                if (lockdownGateHeld) _lockdownHandshakeGate.Release();
-                if (coreGateHeld) _coreGate.Release();
+                CleanupWifiSyncHelper(process, lockdownGateHeld ? _lockdownHandshakeGate : null,
+                    coreGateHeld ? _coreGate : null);
             }
+        }
+    }
+
+    internal static void CleanupWifiSyncHelper(Process process,
+        SemaphoreSlim? lockdownGate, SemaphoreSlim? coreGate)
+    {
+        try
+        {
+            try { if (!process.HasExited) process.Kill(true); }
+            catch (InvalidOperationException) { /* The child may never have started. */ }
+            catch (Exception error)
+            {
+                DiagnosticLogger.ExceptionOnce("wifi-sync-helper-cleanup", "wifi_sync",
+                    "kill_bridge_failed", error);
+            }
+        }
+        finally
+        {
+            try { lockdownGate?.Release(); }
+            finally { coreGate?.Release(); }
         }
     }
 
@@ -5237,7 +5278,7 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         {
             var receiver = _core.GetMediaCastReceiverStatus();
             _lastMediaPollError = null;
-            if (!receiver.Running || !receiver.Ready)
+            if (!receiver.Running || (!receiver.Ready && !receiver.PartialFailure))
             {
                 if (_isMediaCasting && !receiver.Running)
                 {
@@ -5690,7 +5731,11 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
              (!control.RequestedWireless && (control.Starting || control.Stopping))))
             .ToArray();
         foreach (var control in controls)
+        {
             await DisableUsbControlAsync(control);
+            if (control.WiredBridge is not null)
+                throw new InvalidOperationException(LocalizationService.Get("ReverseControlStopFailureAdvice"));
+        }
     }
 
     internal async Task StopDeviceSessionAsync(string udid, ulong expectedHandle = 0,
@@ -6891,6 +6936,9 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
     internal void MarkPendingRecordingSaved(string path)
     {
         if (string.Equals(_pendingRecordingPath, path,
+                StringComparison.OrdinalIgnoreCase) ||
+            _pendingRecordingPath is not null && string.Equals(
+                PendingRecordingStore.CreateStagingPath(_pendingRecordingPath), path,
                 StringComparison.OrdinalIgnoreCase))
             _pendingRecordingPath = PendingRecordingStore.FindLatest();
         NotifyMediaOutputStateChanged();
@@ -7044,8 +7092,7 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
             // RGB32 Frame Server rows are aligned to 64 bytes. Four bytes per
             // pixel therefore requires a width aligned to 16 pixels; choose
             // the nearest aligned width to preserve the source aspect ratio.
-            width = NormalizeVirtualCameraWidth(width);
-            height = NormalizeOutputHeight(height);
+            (width, height) = NormalizeVirtualCameraSize(width, height);
             frameRate = Math.Clamp(frameRate, 10, 60);
             await _virtualCamera.StartAsync(handle, width, height,
                 frameRate, _shutdownCancellation.Token);
@@ -7105,6 +7152,24 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
 
     internal async Task StopStreamingAsync() =>
         await StopSingleMediaOutputAsync(MediaOutputKind.Rtmp);
+
+    internal async Task StopVirtualCameraAsync()
+    {
+        await _mediaOutputGate.WaitAsync();
+        SetMediaOutputTransitioning(true);
+        try
+        {
+            if (_virtualCamera.IsRunning) await _virtualCamera.StopAsync();
+            if (!IsMediaOutputRunning) _mediaOutputUdid = null;
+            RefreshVirtualCameraCapabilities();
+            NotifyMediaOutputStateChanged();
+        }
+        finally
+        {
+            SetMediaOutputTransitioning(false);
+            _mediaOutputGate.Release();
+        }
+    }
 
     private async Task StopSingleMediaOutputAsync(MediaOutputKind kind)
     {
@@ -7301,8 +7366,12 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(IsMediaOutputRunning));
         OnPropertyChanged(nameof(IsMediaOutputTransitioning));
         OnPropertyChanged(nameof(CanStopMediaOutput));
+        OnPropertyChanged(nameof(CanDiscardRecording));
         OnPropertyChanged(nameof(CanStartMediaOutput));
         OnPropertyChanged(nameof(IsRecordingMediaOutput));
+        OnPropertyChanged(nameof(IsStreamingMediaOutput));
+        OnPropertyChanged(nameof(IsVirtualCameraOutputRunning));
+        OnPropertyChanged(nameof(CanStopVirtualCamera));
         OnPropertyChanged(nameof(CanStartRecording));
         OnPropertyChanged(nameof(CanStartStreaming));
         OnPropertyChanged(nameof(CanStopRecording));
@@ -7336,6 +7405,25 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
     {
         value = NormalizeOutputWidth(value);
         return Math.Clamp((value + 8U) & ~15U, 160U, 3840U);
+    }
+
+    internal (uint Width, uint Height) SuggestedVirtualCameraSize() =>
+        SourceVideoWidth > 0 && SourceVideoHeight > 0
+            ? NormalizeVirtualCameraSize(SourceVideoWidth, SourceVideoHeight)
+            : SuggestedMediaOutputSize();
+
+    private static (uint Width, uint Height) NormalizeVirtualCameraSize(uint width, uint height)
+    {
+        width = NormalizeVirtualCameraWidth(width);
+        height = Math.Clamp(height == 0 ? 720U : height & ~1U, 160U, 3840U);
+        const ulong maximumPixels = 3840UL * 2160;
+        if ((ulong)width * height > maximumPixels)
+        {
+            var scale = Math.Sqrt(maximumPixels / ((double)width * height));
+            width = Math.Max(160U, (uint)(width * scale) & ~15U);
+            height = Math.Max(160U, (uint)(height * scale) & ~1U);
+        }
+        return (width, height);
     }
 
     private static string MediaOutputKindLabel(MediaOutputKind kind) => kind switch
@@ -7419,9 +7507,12 @@ internal sealed partial class MainViewModel : INotifyPropertyChanged
 
                 _sessions.SetHandle(state, created.Handle);
                 NotifyCaptureSessionChanged();
-                var deadline = DateTime.UtcNow.AddSeconds(6);
+                // Include activation/re-enumeration, handshake (8s), first
+                // frame (12s), and decoder setup. Native errors still end the
+                // wait immediately; this bound only catches a stalled worker.
+                var readinessWait = Stopwatch.StartNew();
                 var ready = false;
-                while (DateTime.UtcNow < deadline)
+                while (readinessWait.Elapsed < TimeSpan.FromSeconds(90))
                 {
                     await Task.Delay(250, _shutdownCancellation.Token);
                     if (_disposed) return;

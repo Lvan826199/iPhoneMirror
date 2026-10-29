@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -129,7 +129,7 @@ public partial class FirstRunSetupWindow
         StopAssessmentAnimations(); RefreshAssessmentLabels();
         PromptPanel.Children.Clear();
         Status.Text = Details.Text = ""; Help.Visibility = DetailsExpander.Visibility = Visibility.Collapsed;
-        Page.Margin = new(16, 4, 16, 4); Page.MaxWidth = 720; Heading.FontSize = 28;
+        Page.Margin = new(16, 4, 16, 4); Page.SetResourceReference(MaxWidthProperty, "SetupAssessmentMaxWidth"); Heading.SetResourceReference(TextBlock.FontSizeProperty, "FontSize28");
         Scroller.VerticalContentAlignment = VerticalAlignment.Top;
         PageSymbol.Width = PageSymbol.Height = 32;
         PageSymbol.Margin = new(0, 0, 0, 12);
@@ -158,7 +158,7 @@ public partial class FirstRunSetupWindow
             {
                 button.SetResourceReference(StyleProperty, "GhostButton");
                 button.SetResourceReference(ForegroundProperty, "MutedTextBrush");
-                button.FontSize = 12; button.Padding = new(12, 8, 12, 8); button.Margin = new(4, 0, 4, 0);
+                button.SetResourceReference(FontSizeProperty, "SecondaryFontSize"); button.Padding = new(12, 8, 12, 8); button.Margin = new(4, 0, 4, 0);
             }
         }
         _assessmentActions!.Visibility = _assessing ? Visibility.Hidden : Visibility.Visible;
@@ -193,14 +193,18 @@ public partial class FirstRunSetupWindow
             StrokeThickness = 1.7, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round,
             HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center };
         grid.Children.Add(mark);
-        var name = new TextBlock { FontSize = 14, TextWrapping = TextWrapping.Wrap,
+        var name = new TextBlock { TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center, Margin = new(0, 0, 16, 0) };
+        name.SetResourceReference(TextBlock.FontSizeProperty, "SectionTitleFontSize");
         Grid.SetColumn(name, 1); grid.Children.Add(name);
-        var state = new TextBlock { FontSize = 12, TextAlignment = TextAlignment.Right,
+        var state = new TextBlock { TextAlignment = TextAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
+        state.SetResourceReference(TextBlock.FontSizeProperty, "SecondaryFontSize");
         Grid.SetColumn(state, 2); grid.Children.Add(state);
-        var hint = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap,
-            Margin = new(0, 6, 0, 0), LineHeight = 18, Visibility = Visibility.Collapsed };
+        var hint = new TextBlock { TextWrapping = TextWrapping.Wrap,
+            Margin = new(0, 6, 0, 0), Visibility = Visibility.Collapsed };
+        hint.SetResourceReference(TextBlock.FontSizeProperty, "SecondaryFontSize");
+        hint.SetResourceReference(TextBlock.LineHeightProperty, "SubtitleLineHeight");
         hint.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
         Grid.SetColumn(hint, 1); Grid.SetColumnSpan(hint, 2); Grid.SetRow(hint, 1); grid.Children.Add(hint);
         var row = new Border { Child = grid };

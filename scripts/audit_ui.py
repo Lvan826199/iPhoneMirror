@@ -4,6 +4,7 @@ import argparse
 import json
 import re
 import xml.etree.ElementTree as ET
+from audit_localization import LANGUAGES
 
 ROOT = Path(__file__).resolve().parents[1]
 X = '{http://schemas.microsoft.com/winfx/2006/xaml}'
@@ -55,7 +56,7 @@ def audit():
             result['contrast'][theme][f'{foreground}/{background}'] = round((b + .05) / (a + .05), 2)
     for project in ['App', 'DriverInstaller']:
         dictionaries = {}
-        for culture in ['zh-CN', 'en-US', 'zh-HK', 'zh-TW']:
+        for culture in LANGUAGES:
             dictionaries[culture] = {e.attrib[X + 'Key'] for e in ET.parse(ROOT / f'src/{project}/Localization/Strings.{culture}.xaml').getroot() if X + 'Key' in e.attrib}
         union = set.union(*dictionaries.values())
         result['localization'][project] = {culture: sorted(union - keys) for culture, keys in dictionaries.items()}

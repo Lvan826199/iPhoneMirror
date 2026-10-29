@@ -12,7 +12,7 @@
     </Style.Triggers>
    </Style></ui:SymbolIcon.Style>
   </ui:SymbolIcon>
-  <Button x:Name="CaptureButton" Content="{Binding KeyText}" FontSize="32" MinWidth="220" MinHeight="112"
+  <Button x:Name="CaptureButton" Content="{Binding KeyText}" FontSize="{DynamicResource FontSize32}" MinWidth="220" MinHeight="112"
     Padding="24" HorizontalContentAlignment="Center" AutomationProperties.AutomationId="MappingCapture"/>
   <TextBlock Text="{Binding KeyStatus}" Style="{StaticResource StatusText}" TextAlignment="Center" Margin="0,16,0,0"/>
   <TextBlock Text="{DynamicResource WizardCaptureNavigation}" Style="{StaticResource CaptionText}" TextAlignment="Center" Margin="0,12,0,0"/>

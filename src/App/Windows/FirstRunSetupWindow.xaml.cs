@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -36,15 +36,18 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
         ApplyWirelessPreferences = _main.SetupApplyWirelessPreferencesAsync;
         if (rerun && _state.Disposition == SetupDisposition.Completed)
             _state = new() { PreferencesApplied = true };
-        else if (_state.Disposition == SetupDisposition.InProgress)
+        InitializeComponent();
+        // Restoring setup drafts is part of the setup workflow. Claim its
+        // ownership before applying preferences so a general settings warning
+        // cannot open against a setup window that has not been shown yet.
+        _main.SetupActive = true;
+        if (_state.Disposition == SetupDisposition.InProgress)
         {
             if (_state.WirelessBackendDraft is { } backend && _main.WirelessReceiverBackends.FirstOrDefault(v => v.Backend == backend) is { } backendOption)
                 _main.SelectedWirelessReceiverBackend = backendOption;
             if (_main.WirelessDisplayProfiles.FirstOrDefault(v => v.Id == _state.WirelessProfileDraft) is { } profileOption)
                 _main.SelectedWirelessDisplayProfile = profileOption;
         }
-        InitializeComponent();
-        _main.SetupActive = true;
         Loaded += (_, _) =>
         {
             // Show a usable page even when remembering first-run progress fails.
@@ -71,7 +74,8 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
     private static string L(string key) => LocalizationService.Get(key);
     private static TextBlock Text(string key, double size = 14)
     {
-        var text = new TextBlock { FontSize = size, TextWrapping = TextWrapping.Wrap, Margin = new(0, 6, 0, 12) };
+        var text = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new(0, 6, 0, 12) };
+        text.SetResourceReference(TextBlock.FontSizeProperty, $"FontSize{size:0}");
         text.SetResourceReference(TextBlock.TextProperty, key); return text;
     }
     private Button Action(string key, Func<Task> action, Panel? parent = null)
@@ -122,7 +126,7 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
     private void Render()
     {
         if (_assessmentVisible) { RenderAssessment(); return; }
-        Page.MaxWidth = 680; Scroller.VerticalContentAlignment = VerticalAlignment.Top;
+        Page.SetResourceReference(MaxWidthProperty, "SetupPageMaxWidth"); Scroller.VerticalContentAlignment = VerticalAlignment.Top;
         PageSymbol.Width = PageSymbol.Height = 30; PageSymbol.Margin = new(0, 0, 0, 10);
         PageSymbol.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "MutedTextBrush");
         Description.Margin = new(0, 10, 0, 20); Description.MinHeight = 0; PromptPanel.Visibility = Visibility.Visible;
@@ -132,8 +136,8 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
         {
             case SetupStep.Welcome:
                 var welcome = Text("SetupWelcomeNote", 16);
-                welcome.TextAlignment = TextAlignment.Center; welcome.MaxWidth = 440;
-                welcome.LineHeight = 28; welcome.HorizontalAlignment = HorizontalAlignment.Center;
+                welcome.TextAlignment = TextAlignment.Center; welcome.SetResourceReference(MaxWidthProperty, "SetupWelcomeMaxWidth");
+                welcome.SetResourceReference(TextBlock.LineHeightProperty, "WelcomeLineHeight"); welcome.HorizontalAlignment = HorizontalAlignment.Center;
                 welcome.Margin = new(0, 20, 0, 0); Body.Children.Add(welcome); break;
             case SetupStep.Preferences: Preferences(); break;
             case SetupStep.ApplicationMode: ApplicationModeChoices(); break;
@@ -187,7 +191,8 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
             if (!string.IsNullOrWhiteSpace(reason)) Status.Text += " · " + reason;
         }
         Page.Margin = _state.Step == SetupStep.Welcome ? new Thickness(16, 64, 16, 12) : new Thickness(16, 6, 16, 12);
-        Heading.FontSize = _state.Step == SetupStep.Welcome ? 32 : 28;
+        Heading.SetResourceReference(TextBlock.FontSizeProperty,
+            _state.Step == SetupStep.Welcome ? "FontSize32" : "FontSize28");
         UpdateNavigation();
     }
     private void DrawProgress()
@@ -208,8 +213,9 @@ public partial class FirstRunSetupWindow : IPhoneMirror.UI.Controls.RoundedWindo
             var panel = new StackPanel();
             var mark = new TextBlock { Text = i == active ? "●" : i < active ? "✓" : "○", FontSize = 18, TextAlignment = TextAlignment.Center };
             mark.SetResourceReference(TextBlock.ForegroundProperty, i == active ? "AccentBrush" : "MutedTextBrush"); panel.Children.Add(mark);
-            panel.Children.Add(new TextBlock { Text = L("SetupStage" + stages[i]), FontSize = 13, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center,
-                FontWeight = i == active ? FontWeights.SemiBold : FontWeights.Normal, Margin = new(0, 4, 0, 0) });
+            var stage = new TextBlock { Text = L("SetupStage" + stages[i]), TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center,
+                FontWeight = i == active ? FontWeights.SemiBold : FontWeights.Normal, Margin = new(0, 4, 0, 0) };
+            stage.SetResourceReference(TextBlock.FontSizeProperty, "FontSize13"); panel.Children.Add(stage);
             Grid.SetColumn(panel, i * 2); StepIndicator.Children.Add(panel);
         }
     }

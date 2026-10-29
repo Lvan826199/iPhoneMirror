@@ -682,8 +682,8 @@ Equal(false, UsbDeviceRefreshPolicy.ShouldRefreshMetadata(false, false),
     "automatic wired polling reuses cached Lockdown metadata");
 Equal(true, UsbDeviceRefreshPolicy.ShouldRefreshMetadata(true, false),
     "an explicit idle refresh may update Lockdown metadata");
-Equal(false, UsbDeviceRefreshPolicy.ShouldRefreshMetadata(true, true),
-    "an explicit refresh cannot open Lockdown while a wired session exists");
+Equal(true, UsbDeviceRefreshPolicy.ShouldRefreshMetadata(true, true),
+    "native refresh excludes active devices while probing other devices for recovery");
 var wifiSyncTracker = new WifiSyncInsertionTracker();
 Sequence([], wifiSyncTracker.Observe([
         new WiredDeviceTrustState("phone-a", 10, false, false),
@@ -1110,12 +1110,8 @@ Equal(true,
     modernControlsText.Contains("CornerRadius=\"2\"", StringComparison.Ordinal) &&
     modernControlsText.Contains("MinHeight\" Value=\"28\"", StringComparison.Ordinal) &&
     modernControlsText.Contains("MinWidth\" Value=\"28\"", StringComparison.Ordinal) &&
-    modernControlsText.Contains("Storyboard.TargetProperty=\"Width\"",
-        StringComparison.Ordinal) &&
-    modernControlsText.Contains("Storyboard.TargetProperty=\"Height\"",
-        StringComparison.Ordinal) &&
-    modernControlsText.Contains("To=\"4\"", StringComparison.Ordinal) &&
-    modernControlsText.Contains("QuadraticEase", StringComparison.Ordinal) &&
+    modernControlsText.Contains("animations:ScrollBarMotion.IsEnabled", StringComparison.Ordinal) &&
+    modernControlsText.Contains("SystemParameters.ClientAreaAnimationKey", StringComparison.Ordinal) &&
     modernControlsText.Contains("PageLeftCommand", StringComparison.Ordinal) &&
     modernControlsText.Contains("PageRightCommand", StringComparison.Ordinal),
     "shared scrollbars are thin, rounded, animated, and support both orientations");
@@ -1686,10 +1682,10 @@ Equal(true,
 // WorkspaceRevealTests, rather than requiring a particular animation method name.
 Equal(true,
     mainWindowCode.Contains(
-        "SetWorkspaceSurfaceImmediate(LeftPanelHost, visible: false, width: 300)",
+        "SetWorkspaceSurfaceImmediate(LeftPanelHost, visible: false, width: WorkspaceDeviceWidth)",
         StringComparison.Ordinal) &&
     mainWindowCode.Contains(
-        "SetWorkspaceSurfaceImmediate(ControlPanel, visible: false, width: 336)",
+        "SetWorkspaceSurfaceImmediate(ControlPanel, visible: false, width: WorkspaceSettingsWidth)",
         StringComparison.Ordinal),
     "entering full screen cancels pending workspace panel animations");
 var closeMethodIndex = mainWindowCode.IndexOf(
@@ -4267,11 +4263,11 @@ Equal(true,
 var wirelessControllerSource = File.ReadAllText(Path.Combine(sourceDirectory,
     "App", "Services", "WirelessReceiverController.cs"));
 Equal(true,
-    wirelessControllerSource.Contains("UxPlayStartupGracePeriod", StringComparison.Ordinal) &&
+    wirelessControllerSource.Contains("StartupGracePeriod", StringComparison.Ordinal) &&
     wirelessControllerSource.Contains("_automaticRestartBlocked", StringComparison.Ordinal) &&
     wirelessControllerSource.Contains("WirelessUxPlayStartupFailed", StringComparison.Ordinal) &&
-    wirelessControllerSource.Contains("manual Apply is the explicit retry path", StringComparison.Ordinal),
-    "a crashing UxPlay child is not relaunched by every background refresh");
+    wirelessControllerSource.Contains("WirelessOriginalStartupFailed", StringComparison.Ordinal),
+    "a crashing receiver child is not relaunched by every background refresh");
 var uxPlayHostSource = File.ReadAllText(Path.Combine(sourceDirectory,
     "UxPlayHost", "UxPlayHost.cpp"));
 Equal(true,

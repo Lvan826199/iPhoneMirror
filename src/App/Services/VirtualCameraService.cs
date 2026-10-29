@@ -163,6 +163,7 @@ internal sealed class VirtualCameraService : IAsyncDisposable
         @"Software\Classes\CLSID\{4C0D85FD-695A-491D-945B-21DDF7EEC1E2}\InprocServer32";
     private static readonly TimeSpan FrameTimeout = TimeSpan.FromSeconds(5);
     private readonly Func<ulong, uint, uint, VideoFrame?> _frameProvider;
+    private readonly Func<ulong, long?>? _timestampProvider;
     private readonly Func<uint, uint, int, int> _startCamera;
     private readonly Func<VideoFrame, int> _publishFrame;
     private readonly Func<int> _stopCamera;
@@ -211,13 +212,14 @@ internal sealed class VirtualCameraService : IAsyncDisposable
     internal ulong SessionHandle { get; private set; }
 
     internal VirtualCameraService(
-        Func<ulong, uint, uint, VideoFrame?> frameProvider)
+        Func<ulong, uint, uint, VideoFrame?> frameProvider,
+        Func<ulong, long?>? timestampProvider = null)
         : this(frameProvider,
             (width, height, frameRate) => im_vcam_start_ex(
                 "iPhoneMirror Virtual Camera", width, height, checked((uint)frameRate)),
             frame => im_vcam_publish_bgra(frame.Pixels,
                 frame.Width, frame.Height, frame.Stride, frame.Timestamp100Ns),
-            im_vcam_stop)
+            im_vcam_stop, timestampProvider)
     {
     }
 
@@ -225,9 +227,11 @@ internal sealed class VirtualCameraService : IAsyncDisposable
         Func<ulong, uint, uint, VideoFrame?> frameProvider,
         Func<uint, uint, int, int> startCamera,
         Func<VideoFrame, int> publishFrame,
-        Func<int> stopCamera)
+        Func<int> stopCamera,
+        Func<ulong, long?>? timestampProvider = null)
     {
         _frameProvider = frameProvider;
+        _timestampProvider = timestampProvider;
         _startCamera = startCamera;
         _publishFrame = publishFrame;
         _stopCamera = stopCamera;
@@ -537,37 +541,89 @@ internal sealed class VirtualCameraService : IAsyncDisposable
         Exception? failure = null;
         VideoFrame? lastFrame = null;
         var frameWait = Stopwatch.StartNew();
+        var throughputClock = Stopwatch.StartNew();
+        long publishedFrames = 0, sourceTimestampChanges = 0, missingReads = 0;
+        long readTicks = 0, publishTicks = 0;
+        long? previousTimestamp = null;
+        var sourceDriven = frameRate == 60 && _timestampProvider is not null;
+        var lastRead = Stopwatch.StartNew();
+        var frameInterval = TimeSpan.FromSeconds(1.0 / frameRate);
+        var timerResolutionSet = sourceDriven && timeBeginPeriod(1) == 0;
         try
         {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1.0 / frameRate));
+            // Poll only the cheap source timestamp between frames. Sampling the
+            // pixels at a separate 60 Hz clock can miss frames whenever source
+            // delivery jitters across that clock, even with a fast conversion.
+            using var timer = new PeriodicTimer(sourceDriven
+                ? TimeSpan.FromMilliseconds(2) : TimeSpan.FromSeconds(1.0 / frameRate));
             while (await timer.WaitForNextTickAsync(cancellationToken))
             {
+                if (sourceDriven && lastFrame is not null)
+                {
+                    var sourceTimestamp = _timestampProvider!(sessionHandle);
+                    // Media playback can supply pixels without a separate
+                    // native source clock. Preserve its selected cadence.
+                    if (sourceTimestamp is null && lastRead.Elapsed < frameInterval)
+                        continue;
+                    if (sourceTimestamp is not null && sourceTimestamp == previousTimestamp &&
+                        lastRead.Elapsed < TimeSpan.FromMilliseconds(100))
+                        continue;
+                }
+                // Periodic full reads also detect source loss and pixel updates
+                // that retain their timestamp, including static AirPlay screens.
+                lastRead.Restart();
+                var readStarted = Stopwatch.GetTimestamp();
                 var frame = _frameProvider(sessionHandle, width, height);
+                readTicks += Stopwatch.GetTimestamp() - readStarted;
                 if (frame is not null)
                 {
+                    if (previousTimestamp != frame.Timestamp100Ns)
+                        ++sourceTimestampChanges;
+                    previousTimestamp = frame.Timestamp100Ns;
                     // Static AirPlay screens can retain a valid frame indefinitely.
                     // A successful read proves availability even when its source
                     // timestamp repeats or resets; only missing reads time out.
                     lastFrame = frame;
                     frameWait.Restart();
                 }
-                else if (lastFrame is null)
+                else
                 {
+                    ++missingReads;
+                    if (lastFrame is null)
+                    {
+                        if (frameWait.Elapsed > FrameTimeout)
+                            throw new TimeoutException(
+                                LocalizationService.Get("MediaOutputFrameTimeout"));
+                        continue;
+                    }
                     if (frameWait.Elapsed > FrameTimeout)
                         throw new TimeoutException(
-                            LocalizationService.Get("MediaOutputFrameTimeout"));
-                    continue;
-                }
-                else if (frameWait.Elapsed > FrameTimeout)
-                {
-                    throw new TimeoutException(
-                        LocalizationService.Get("MediaOutputFrameStalled"));
+                            LocalizationService.Get("MediaOutputFrameStalled"));
                 }
 
                 var currentFrame = lastFrame;
+                var publishStarted = Stopwatch.GetTimestamp();
                 var result = _publishFrame(currentFrame);
+                publishTicks += Stopwatch.GetTimestamp() - publishStarted;
                 if (result < 0)
                     throw new InvalidOperationException(HResultMessage(result));
+                ++publishedFrames;
+                if (throughputClock.Elapsed >= TimeSpan.FromSeconds(5))
+                {
+                    // Timestamp changes measure the source observed by this
+                    // pump, not visual motion; static sources may repeat them.
+                    var seconds = throughputClock.Elapsed.TotalSeconds;
+                    DiagnosticLogger.Info("virtual_camera", "throughput",
+                        ("target_fps", frameRate),
+                        ("published_fps", Math.Round(publishedFrames / seconds, 2)),
+                        ("source_timestamp_fps", Math.Round(sourceTimestampChanges / seconds, 2)),
+                        ("read_ms", Math.Round(readTicks * 1000.0 / Stopwatch.Frequency / publishedFrames, 2)),
+                        ("publish_ms", Math.Round(publishTicks * 1000.0 / Stopwatch.Frequency / publishedFrames, 2)),
+                        ("missing_reads", missingReads), ("size", $"{width}x{height}"));
+                    throughputClock.Restart();
+                    publishedFrames = sourceTimestampChanges = missingReads = 0;
+                    readTicks = publishTicks = 0;
+                }
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -579,6 +635,7 @@ internal sealed class VirtualCameraService : IAsyncDisposable
         }
         finally
         {
+            if (timerResolutionSet) timeEndPeriod(1);
             try { _stopCamera(); } catch (Exception error) { failure ??= error; }
             await _lifecycleGate.WaitAsync();
             try
@@ -604,6 +661,12 @@ internal sealed class VirtualCameraService : IAsyncDisposable
     private static string HResultMessage(int result) =>
         Marshal.GetExceptionForHR(result)?.Message ??
         $"Windows error 0x{unchecked((uint)result):X8}.";
+
+    [DllImport("winmm.dll", ExactSpelling = true)]
+    private static extern uint timeBeginPeriod(uint period);
+
+    [DllImport("winmm.dll", ExactSpelling = true)]
+    private static extern uint timeEndPeriod(uint period);
 
     public async ValueTask DisposeAsync()
     {

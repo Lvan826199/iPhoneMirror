@@ -932,7 +932,7 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{DynamicResource DevicesTitle}" FontSize="{DynamicResource FontSize16}" FontWeight="SemiBold"
-                                   VerticalAlignment="Center"/>
+                                   VerticalAlignment="Center" TextWrapping="Wrap"/>
                         <TextBlock Grid.Column="1" Text="{Binding DeviceCount}"
                                    Foreground="{DynamicResource MutedTextBrush}"
                                    VerticalAlignment="Center" FontSize="{DynamicResource SecondaryFontSize}"/>
@@ -1059,10 +1059,10 @@
                         </Button>
                         <Button Click="OnPreviewWindowClick" IsEnabled="{Binding CanUseVisualPreviewTools}"
                                 Style="{StaticResource ToolButton}" Margin="0,0,0,8">
-                            <StackPanel Orientation="Horizontal">
+                            <DockPanel LastChildFill="True">
                                 <controls:ThemedSymbolIcon Style="{StaticResource ButtonSymbolIcon}" Symbol="WindowNew20" FontSize="15"/>
-                                <TextBlock Text="{DynamicResource SeparateWindow}" Margin="9,0,0,0"/>
-                            </StackPanel>
+                                <TextBlock Text="{DynamicResource SeparateWindow}" TextWrapping="Wrap" Margin="9,0,0,0"/>
+                            </DockPanel>
                         </Button>
                         <Button Click="OnScreenshotClick" IsEnabled="{Binding CanUseVisualPreviewTools}"
                                 Style="{StaticResource ToolButton}" Margin="0,0,0,8">
@@ -1635,7 +1635,7 @@
                             <TextBlock TextWrapping="Wrap" Text="{DynamicResource ResolutionLabel}" Style="{StaticResource StatLabel}"/>
                             <TextBlock TextWrapping="Wrap" Text="{Binding Resolution}" Style="{StaticResource StatValue}"
                                        AutomationProperties.AutomationId="ResolutionValue"/>
-                            <TextBlock Text="{Binding TargetResolutionDisplay}" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource CaptionFontSize}" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding TargetResolutionDisplay}" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource CaptionFontSize}" TextWrapping="Wrap"/>
                         </StackPanel>
                         <StackPanel Grid.Column="2" Margin="13">
                             <TextBlock TextWrapping="Wrap" Text="{DynamicResource FrameRateLabel}" Style="{StaticResource StatLabel}"/>
@@ -1666,7 +1666,7 @@
                                            Visibility="Collapsed" IsVisibleChanged="OnWorkspacePanelVisibilityChanged">
             <Border x:Name="ControlPanelContent"
                     Style="{StaticResource WorkspaceCardBorder}"
-                    Padding="16,16,1,16"
+                    Padding="16"
                     ClipToBounds="True">
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Auto"
@@ -1675,7 +1675,7 @@
                         <Style TargetType="ScrollBar"
                                BasedOn="{StaticResource ContentEdgeScrollBarStyle}"/>
                     </ScrollViewer.Resources>
-                    <StackPanel Margin="0,0,10,0">
+                    <StackPanel>
                         <Grid>
                             <TextBlock Text="{DynamicResource ControlTitle}" FontSize="{DynamicResource FontSize16}" FontWeight="SemiBold"
                                        VerticalAlignment="Center"/>
@@ -1960,10 +1960,10 @@
                                            Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource CaptionFontSize}"/>
                                 <Button Command="{Binding ManageKeyboardMappingCommand}" Style="{StaticResource ToolButton}" Margin="0,10,0,0"
                                         AutomationProperties.AutomationId="OpenKeyboardMappingButton">
-                                    <StackPanel Orientation="Horizontal">
+                                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                                         <ui:SymbolIcon Symbol="Keyboard20" Style="{StaticResource ButtonSymbolIcon}" Margin="0,0,8,0"/>
-                                        <TextBlock Text="{DynamicResource MappingManage}" TextWrapping="Wrap"/>
-                                    </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{DynamicResource MappingManage}" TextWrapping="Wrap"/>
+                                    </Grid>
                                 </Button>
                                 <TextBlock Text="{Binding KeyboardMappingStatus}" TextWrapping="Wrap" Margin="0,6,0,0"
                                            Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource CaptionFontSize}"/>

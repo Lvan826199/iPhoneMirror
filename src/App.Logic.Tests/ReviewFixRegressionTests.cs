@@ -17,6 +17,7 @@ internal static class ReviewFixRegressionTests
         {
             await TestDownloadOwnershipAsync(root);
             await TestRecordingCopyAsync(root);
+            await TestRecordingPublishFailureAsync(root);
         }
         finally { Directory.Delete(root, recursive: true); }
         Console.WriteLine("Review fixes passed: parallel native readback, download file ownership and recording save fallback.");
@@ -153,6 +154,42 @@ internal static class ReviewFixRegressionTests
         Check(File.ReadAllBytes(pending).SequenceEqual(payload), "failed recording save deleted its source");
         await PendingRecordingStore.CopyAndDeleteAsync(pending, saved);
         Check(!File.Exists(pending), "recording save could not retry after a destination failure");
+    }
+
+    private static async Task TestRecordingPublishFailureAsync(string root)
+    {
+        var destination = Path.Combine(root, "published.mp4");
+        var staging = PendingRecordingStore.PrepareStagingPath(destination);
+        byte[] finalized = [2, 7, 1, 8, 2, 8];
+        File.WriteAllBytes(staging, finalized);
+        File.WriteAllText(destination, "existing recording");
+        await ThrowsAsync<IOException>(() => Task.Run(() =>
+            PendingRecordingStore.PublishFinalized(staging, destination)));
+        Check(File.ReadAllBytes(staging).SequenceEqual(finalized),
+            "a completed recording was lost after the destination conflicted");
+        Check(File.ReadAllText(destination) == "existing recording",
+            "publishing overwrote an existing destination");
+        Check(PendingRecordingStore.ResolvePath(destination) == staging,
+            "the pending-save UI selected the existing destination instead of the new recording");
+        File.SetLastWriteTimeUtc(staging, DateTime.UtcNow.AddMinutes(1));
+        Check(PendingRecordingStore.FindLatest(root) == staging,
+            "restart recovery ignored a finalized recording retained after publish failure");
+        await ThrowsAsync<IOException>(() => Task.Run(() =>
+            PendingRecordingStore.PrepareStagingPath(destination)));
+        Check(File.ReadAllBytes(staging).SequenceEqual(finalized),
+            "a new recording erased an unsaved finalized recording");
+        var saved = Path.Combine(root, "rescued.mp4");
+        await PendingRecordingStore.CopyAndDeleteAsync(staging, saved);
+        Check(File.ReadAllBytes(saved).SequenceEqual(finalized) &&
+            !File.Exists(staging) && !File.Exists(staging + ".finalized"),
+            "saving a recovered recording did not clean up its source and marker");
+
+        staging = PendingRecordingStore.PrepareStagingPath(destination);
+        File.WriteAllBytes(staging, finalized);
+        File.Delete(destination);
+        PendingRecordingStore.PublishFinalized(staging, destination);
+        Check(File.ReadAllBytes(destination).SequenceEqual(finalized) &&
+            !File.Exists(staging + ".finalized"), "successful finalization retained a recovery marker");
     }
 
     private static async Task ThrowsAsync<T>(Func<Task> action) where T : Exception

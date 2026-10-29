@@ -12,7 +12,7 @@
     <Grid x:Name="StepIndicator" HorizontalAlignment="Center" MinHeight="56"/>
     <StackPanel x:Name="CompactIndicator" Visibility="Collapsed" Margin="0,4,0,0">
      <TextBlock Text="{Binding ProgressText}" Style="{StaticResource CaptionText}" TextAlignment="Center"/>
-     <TextBlock Text="{Binding Title}" Style="{StaticResource BodyText}" FontSize="20" FontWeight="SemiBold" TextAlignment="Center" Margin="0,4,0,0"/>
+     <TextBlock Text="{Binding Title}" Style="{StaticResource BodyText}" FontSize="{DynamicResource FontSize20}" FontWeight="SemiBold" TextAlignment="Center" Margin="0,4,0,0"/>
     </StackPanel>
    </StackPanel>
    <Button Style="{StaticResource SubWindowCloseButton}" Click="OnCloseClick">
@@ -23,7 +23,7 @@
    <Grid x:Name="StepPage" MinHeight="300" Margin="8,8,8,16">
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <StackPanel x:Name="StepHeading" Margin="0,0,0,24">
-     <TextBlock x:Name="StepNumberText" Text="{Binding StepNumber}" FontSize="20" Foreground="{DynamicResource AccentBrush}" TextAlignment="Center"/>
+     <TextBlock x:Name="StepNumberText" Text="{Binding StepNumber}" FontSize="{DynamicResource FontSize20}" Foreground="{DynamicResource AccentBrush}" TextAlignment="Center"/>
      <TextBlock x:Name="StepTitle" Text="{Binding Title}" FontSize="{DynamicResource PageTitleFontSize}" FontWeight="SemiBold" TextWrapping="Wrap" TextAlignment="Center" Margin="0,8,0,0"/>
      <TextBlock Text="{Binding Subtitle}" Style="{StaticResource SecondaryText}" TextAlignment="Center" Margin="0,8,0,0"/>
     </StackPanel>

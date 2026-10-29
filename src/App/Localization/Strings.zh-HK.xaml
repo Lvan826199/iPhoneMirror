@@ -732,6 +732,7 @@
     <system:String x:Key="VirtualCameraDescription">將目前螢幕鏡像畫面註冊為會議和錄製軟件可選擇的攝影機裝置。</system:String>
     <system:String x:Key="VirtualCameraBackendMissing">未安裝相容的 Windows 虛擬攝影機媒體源。按鈕將保持停用，避免誤報不存在的攝影機裝置。</system:String>
     <system:String x:Key="StartVirtualCamera">啟動虛擬攝影機</system:String>
+    <system:String x:Key="StopVirtualCamera">停止虛擬攝影機</system:String>
     <system:String x:Key="StopMediaOutput">停止輸出</system:String>
     <system:String x:Key="RecordSaveTitle">儲存螢幕鏡像錄製</system:String>
     <system:String x:Key="RecordMp4Filter">MP4 影片 (*.mp4)|*.mp4</system:String>
@@ -1635,4 +1636,13 @@
     <system:String x:Key="StopRecordingOnly">停止錄影</system:String>
     <system:String x:Key="StopStreamingOnly">停止直播</system:String>
     <system:String x:Key="MediaOutputRecordingAndStreaming">正在錄影及直播</system:String>
+    <system:String x:Key="DeviceBindingOperationFailed">裝置操作未完成。請重試；如果問題持續，請查看診斷記錄。</system:String>
+    <system:String x:Key="DeviceBindingRefreshFailed">無法重新整理裝置檔案。請重試；如果問題持續，請查看診斷記錄。</system:String>
+    <system:String x:Key="MediaOutputOperationFailed">媒體輸出操作未完成。請重試；如果問題持續，請查看診斷記錄。</system:String>
+    <system:String x:Key="TrayStartFailed">無法從系統匣啟動投屏。請檢查裝置後重試。</system:String>
+    <system:String x:Key="TrayRefreshFailed">無法從系統匣重新整理裝置。請重試。</system:String>
+    <system:String x:Key="RecordingSaveRetry">錄製檔案仍可儲存。請再次按儲存，並選擇具有寫入權限的資料夾。</system:String>
+    <system:String x:Key="MicrophoneRefreshFailed">無法重新整理咪高峰清單。請檢查咪高峰連線及存取權限後重試。</system:String>
+    <system:String x:Key="WirelessOriginalStartupFailed">無線接收器啟動後立即結束，請重新套用無線設定以重試。</system:String>
+    <system:String x:Key="DlnaRecovering">AirPlay 可用；DLNA 啟動失敗，正在自動重試。</system:String>
 </ResourceDictionary>

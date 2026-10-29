@@ -62,7 +62,7 @@
                         <TextBlock Text="{DynamicResource TrayNoDevices}" TextWrapping="Wrap"
                                    Foreground="{DynamicResource MutedTextBrush}" Margin="0,10,0,0">
                             <TextBlock.Style>
-                                <Style TargetType="TextBlock">
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource BodyText}">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ElementName=DeviceList, Path=HasItems}" Value="False">

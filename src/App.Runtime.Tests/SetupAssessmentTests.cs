@@ -152,11 +152,21 @@ internal static partial class Program
         var store = new FirstRunSetupStore(Path.Combine(Path.GetFullPath(output), "check-window.json"));
         void Pump() { var frame = new DispatcherFrame(); Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, () => frame.Continue = false); Dispatcher.PushFrame(frame); }
         void Complete(Task task) { var timer = Stopwatch.StartNew(); while (!task.IsCompleted && timer.Elapsed < TimeSpan.FromSeconds(20)) { Pump(); Thread.Sleep(2); } task.GetAwaiter().GetResult(); }
-        void Settled(FirstRunSetupWindow window) { var timer = Stopwatch.StartNew(); do { Pump(); Thread.Sleep(2); } while (window.IsAssessing && timer.Elapsed < TimeSpan.FromSeconds(20)); Check(!window.IsAssessing, "UI check did not settle."); window.UpdateLayout(); }
+        void Settled(FirstRunSetupWindow window)
+        {
+            var timer = Stopwatch.StartNew();
+            do { Pump(); Thread.Sleep(2); } while (window.IsAssessing && timer.Elapsed < TimeSpan.FromSeconds(20));
+            Check(!window.IsAssessing, "UI check did not settle.");
+            window.UpdateLayout();
+            var scrollbarFindings = new HashSet<string>();
+            AuditScrollBarLayout(window, "setup-assessment", scrollbarFindings);
+            Check(scrollbarFindings.Count == 0, string.Join(Environment.NewLine, scrollbarFindings));
+        }
         Task Call(FirstRunSetupWindow window, string method, params object[] args) => (Task)typeof(FirstRunSetupWindow).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, args)!;
         void Close(FirstRunSetupWindow window) { typeof(FirstRunSetupWindow).GetField("_allowClose", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(window, true); window.Close(); }
         void Capture(FirstRunSetupWindow window, string name)
         {
+            if (ReviewCapture) { SaveWindowRender(window, Path.Combine(output, name + ".png")); return; }
             window.UpdateLayout();
             var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32); bitmap.Render(window);
             var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap));
@@ -174,7 +184,7 @@ internal static partial class Program
                 app.Run(window);
                 return 0;
             }
-            foreach (var culture in new[] { "zh-CN", "zh-TW", "zh-HK", "en-US" })
+            foreach (var culture in ReviewCapture ? new[] { "zh-CN" } : IPhoneMirror.UI.Services.SupportedUiCultures.All)
             foreach (var theme in new[] { AppTheme.Light, AppTheme.Dark })
             {
                 typeof(LocalizationService).GetMethod("ApplyLanguage", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, [culture, false, false]);
@@ -184,7 +194,9 @@ internal static partial class Program
                 window.Show(); _ = Call(window, "CheckSettingsAsync");
                 var rows = (System.Collections.IDictionary)typeof(FirstRunSetupWindow).GetField("_checkRows", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
                 var progressTimer = Stopwatch.StartNew();
-                while ((!rows.Contains("receiver") || progressTimer.ElapsedMilliseconds < 350) && progressTimer.Elapsed < TimeSpan.FromSeconds(5)) { Pump(); Thread.Sleep(2); }
+                // Compare settled layout positions, after the entrance motion has
+                // finished; completing the check cancels that motion immediately.
+                while ((!rows.Contains("receiver") || progressTimer.ElapsedMilliseconds < 650) && progressTimer.Elapsed < TimeSpan.FromSeconds(5)) { Pump(); Thread.Sleep(2); }
                 Check(rows.Contains("receiver") && window.IsAssessing, "Pending real check did not appear in the assessment card.");
                 window.UpdateLayout();
                 var body = (StackPanel)window.FindName("Body");
@@ -270,7 +282,7 @@ internal static partial class Program
             receiverGate.SetResult(new(WirelessRuntimeProbeStatus.Ready, 0)); receiverGate = null;
             Complete(refreshPending); Check(!vm.SetupActive, "Targeted verification retained ownership after close.");
             Console.WriteLine("PASS scoped probe counts, direct task advancement, no scan on skip/back, failed repair stays inline and targeted-check close ownership.");
-            Console.WriteLine("PASS explicitly invoked diagnostics, direct repair navigation, explicit full configuration, responsive async close, 4 languages and 2 themes.");
+            Console.WriteLine($"PASS explicitly invoked diagnostics, direct repair navigation, explicit full configuration, responsive async close, {IPhoneMirror.UI.Services.SupportedUiCultures.All.Count} languages and 2 themes.");
         }
         finally { app.Shutdown(); }
         return 0;

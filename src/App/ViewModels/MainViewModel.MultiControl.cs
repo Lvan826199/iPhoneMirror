@@ -58,7 +58,9 @@ internal sealed partial class MainViewModel
             return true;
         var appleUdid = udid is null ? null : ResolveAppleUdid(udid);
         return appleUdid is not null && _deviceControls.Values.Any(c =>
-            (c.Enabled || c.Starting || c.Stopping) && DeviceViewModel.UdidEquals(c.AppleUdid, appleUdid));
+            (c.Enabled || c.Starting || c.Stopping ||
+             (!DeviceViewModel.UdidEquals(c.DeviceUdid, udid) && c.WiredBridge is not null)) &&
+            DeviceViewModel.UdidEquals(c.AppleUdid, appleUdid));
     }
 
     private Task StartDeviceControlAsync(string? udid, bool wireless)
@@ -89,6 +91,35 @@ internal sealed partial class MainViewModel
             {
                 // Only the operation admitted by SingleFlight may change startup
                 // state. A request that joins recovery must leave its state intact.
+                control.Starting = true;
+                // A failed stop still owns its USB claim. Both transport entry
+                // points retire it before changing bindings or creating a bridge.
+                if (control.WiredBridge is { } previousBridge)
+                {
+                    NotifyUsbControlStateChanged();
+                    try { await previousBridge.DisposeAsync(); }
+                    catch (Exception cleanupError)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        control.Failed = true;
+                        var advice = LocalizationService.Get("ReverseControlStopFailureAdvice");
+                        control.Status = LocalizationService.Format("ReverseControlUsbStopFailedFormat", cleanupError.Message);
+                        control.ControlStatus.Failed(mode, device!.Name, advice, cleanupError.Message);
+                        DiagnosticLogger.ReverseControlError("usb", "retry_cleanup_failed",
+                            ("error", AppLog.Error(cleanupError)));
+                        ShowDeviceControlError(control, LocalizationService.Get("ReverseControlTransportWired"),
+                            advice, "ReverseControlStopErrorTitle", AppLog.Error(cleanupError),
+                            retryOperation: () => StartDeviceControlAsync(target, wireless));
+                        return;
+                    }
+                    if (ReferenceEquals(control.WiredBridge, previousBridge))
+                    {
+                        control.WiredBridge = null;
+                        control.WiredTarget = null;
+                    }
+                    token.ThrowIfCancellationRequested();
+                    if (_disposed || control.Stopping) return;
+                }
                 control.AppleUdid = null;
                 control.Binding = null;
                 control.Failed = false;

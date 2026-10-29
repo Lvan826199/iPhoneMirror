@@ -6,6 +6,9 @@
 #include <ksmedia.h>
 #include <mfobjects.h>
 #include <propvarutil.h>
+#include <timeapi.h>
+#include <emmintrin.h>
+#include <avrt.h>
 
 #include <algorithm>
 #include <chrono>
@@ -24,7 +27,20 @@ constexpr UINT32 FrameRateDenominator = 1;
 constexpr DWORD SamplePoolSize = 10;
 constexpr std::size_t MaximumPendingSampleRequests = SamplePoolSize * 2U;
 constexpr auto FirstFrameWait = std::chrono::milliseconds(500);
-constexpr auto FirstFrameRetryInterval = std::chrono::milliseconds(2);
+
+class CaptureThreadScheduling {
+public:
+    CaptureThreadScheduling() noexcept {
+        handle_ = AvSetMmThreadCharacteristicsW(L"Capture", &task_index_);
+        if (handle_) AvSetMmThreadPriority(handle_, AVRT_PRIORITY_HIGH);
+    }
+    ~CaptureThreadScheduling() {
+        if (handle_) AvRevertMmThreadCharacteristics(handle_);
+    }
+private:
+    DWORD task_index_{};
+    HANDLE handle_{};
+};
 
 bool discover_channel_path(std::wstring& path) {
     if (!WaitNamedPipeW(FrameChannelPipeName, 20)) return false;
@@ -72,7 +88,7 @@ HRESULT create_media_type(GUID subtype, UINT32 width, UINT32 height,
     const bool nv12 = subtype == MFVideoFormat_NV12;
     const auto sample_bytes = static_cast<std::uint64_t>(width) * height *
         (nv12 ? 3U : 8U) / 2U;
-    if (sample_bytes > std::numeric_limits<UINT32>::max())
+    if (sample_bytes > MaximumFrameBytes)
         return MF_E_INVALIDMEDIATYPE;
     const auto bitrate_bytes = sample_bytes * 8U * frame_rate;
     const auto sample_size = static_cast<UINT32>(sample_bytes);
@@ -181,16 +197,54 @@ OutputRectangle fitted_rectangle(UINT32 source_width, UINT32 source_height,
 
 void render_bgra(const FrameSnapshot* frame, BYTE* output, LONG pitch,
                  UINT32 width, UINT32 height) {
+    const auto opaque = _mm_set1_epi32(-16777216);
+    const auto fill_black = [opaque](BYTE* destination, UINT32 pixels) {
+        UINT32 x = 0;
+        for (; x + 4 <= pixels; x += 4)
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(destination + x * 4U), opaque);
+        for (; x < pixels; ++x) {
+            const UINT32 black = 0xff000000U;
+            std::memcpy(destination + x * 4U, &black, sizeof(black));
+        }
+    };
+    const auto rectangle = frame == nullptr || frame->pixels.empty()
+        ? OutputRectangle{} : fitted_rectangle(frame->width, frame->height, width, height, false);
     for (UINT32 y = 0; y < height; ++y) {
         BYTE* row = output + static_cast<std::ptrdiff_t>(y) * pitch;
-        std::memset(row, 0, width * 4U);
-        for (UINT32 x = 0; x < width; ++x)
-            row[x * 4U + 3U] = 255;
+        if (y < rectangle.y || y >= rectangle.y + rectangle.height)
+            fill_black(row, width);
+        else {
+            fill_black(row, rectangle.x);
+            fill_black(row + (rectangle.x + rectangle.width) * 4U,
+                width - rectangle.x - rectangle.width);
+        }
     }
     if (frame == nullptr || frame->pixels.empty()) return;
 
-    const auto rectangle = fitted_rectangle(
-        frame->width, frame->height, width, height, false);
+    if (rectangle.width == frame->width && rectangle.height == frame->height) {
+        // Native portrait output only needs the few alignment pixels at the
+        // sides. Copy its rows directly instead of gathering every pixel
+        // through a scaling map in the Frame Server process.
+        for (UINT32 y = 0; y < rectangle.height; ++y) {
+            const BYTE* source = frame->pixels.data() +
+                static_cast<std::size_t>(y) * frame->stride;
+            BYTE* destination = output +
+                static_cast<std::ptrdiff_t>(rectangle.y + y) * pitch + rectangle.x * 4U;
+            UINT32 x = 0;
+            for (; x + 4 <= rectangle.width; x += 4) {
+                const auto pixels = _mm_loadu_si128(reinterpret_cast<const __m128i*>(source + x * 4U));
+                _mm_storeu_si128(reinterpret_cast<__m128i*>(destination + x * 4U),
+                    _mm_or_si128(pixels, opaque));
+            }
+            for (; x < rectangle.width; ++x) {
+                UINT32 pixel;
+                std::memcpy(&pixel, source + x * 4U, sizeof(pixel));
+                pixel |= 0xff000000U;
+                std::memcpy(destination + x * 4U, &pixel, sizeof(pixel));
+            }
+        }
+        return;
+    }
     const auto& maps = scaling_maps(frame->width, frame->height,
                                     rectangle.width, rectangle.height);
     for (UINT32 y = 0; y < rectangle.height; ++y) {
@@ -280,7 +334,7 @@ HRESULT media_type_layout(IMFMediaType* media_type, GUID& subtype,
         return MF_E_INVALIDMEDIATYPE;
     const auto sample_bytes = static_cast<std::uint64_t>(width) * height *
         (subtype == MFVideoFormat_NV12 ? 3U : 8U) / 2U;
-    if (sample_bytes > std::numeric_limits<UINT32>::max())
+    if (sample_bytes > MaximumFrameBytes)
         return MF_E_INVALIDMEDIATYPE;
     sample_size = static_cast<UINT32>(sample_bytes);
     return S_OK;
@@ -297,6 +351,18 @@ HRESULT MediaStream::RuntimeClassInitialize(MediaSource* source,
     parent_ = source;
     if (channel_path != nullptr) channel_path_.assign(channel_path);
     if (channel_path_.empty()) discover_channel_path(channel_path_);
+    if (!channel_path_.empty()) reader_.open(channel_path_.c_str());
+    if (!valid_output_size(output_width, output_height)) {
+        output_width = reader_.output_width();
+        output_height = reader_.output_height();
+    }
+    // Frame Server activation can omit our custom attributes. The discovery
+    // channel must carry the selected rate too, including before the app has
+    // published its first frame. Keep explicit activation settings authoritative.
+    if (frame_rate < 10 || frame_rate > 60) {
+        frame_rate = reader_.output_frame_rate();
+        if (frame_rate == 0) frame_rate = 30;
+    }
 
     HRESULT hr = MFCreateEventQueue(&event_queue_);
     if (FAILED(hr)) return hr;
@@ -314,9 +380,7 @@ HRESULT MediaStream::RuntimeClassInitialize(MediaSource* source,
     frame_rate = std::clamp(frame_rate, 10U, 60U);
     frame_duration_100ns_ = 10'000'000LL / frame_rate;
     std::vector<std::pair<UINT32, UINT32>> sizes;
-    if (output_width >= 160 && output_width <= MaximumFrameWidth &&
-        output_height >= 160 && output_height <= MaximumFrameHeight &&
-        (output_width & 1U) == 0 && (output_height & 1U) == 0) {
+    if (valid_output_size(output_width, output_height)) {
         sizes.emplace_back(output_width, output_height);
     } else {
         sizes = {{1280, 720}, {720, 1280}};
@@ -352,9 +416,10 @@ HRESULT MediaStream::RuntimeClassInitialize(MediaSource* source,
     // Activation must remain successful when the producer is between frames.
     // RequestSample retries opening and emits black until the WPF publisher is
     // available.
-    if (!channel_path_.empty()) reader_.open(channel_path_.c_str());
     sample_worker_ = std::jthread(
         [this](std::stop_token token) { process_sample_requests(token); });
+    frame_worker_ = std::jthread(
+        [this](std::stop_token token) { collect_frames(token); });
     return S_OK;
 }
 
@@ -418,6 +483,14 @@ HRESULT MediaStream::RequestSample(IUnknown* token) {
 
 void MediaStream::process_sample_requests(
     std::stop_token stop_token) noexcept {
+    CaptureThreadScheduling scheduling;
+    // Frame Server runs in a different process from the publisher. Its own
+    // waits need 1 ms timer resolution to pace 60 Hz samples; an application
+    // timeBeginPeriod call does not change this process's timer resolution.
+    struct TimerResolution {
+        bool active{timeBeginPeriod(1) == TIMERR_NOERROR};
+        ~TimerResolution() { if (active) timeEndPeriod(1); }
+    } timer_resolution;
     std::unique_lock lock(mutex_);
     while (!stop_token.stop_requested()) {
         const bool ready = sample_condition_.wait(lock, stop_token, [this] {
@@ -528,13 +601,17 @@ HRESULT MediaStream::shutdown() {
         sample_requests_.clear();
     }
     sample_worker_.request_stop();
+    frame_worker_.request_stop();
     sample_condition_.notify_all();
+    frame_condition_.notify_all();
     if (sample_worker_.joinable()) sample_worker_.join();
+    if (frame_worker_.joinable()) frame_worker_.join();
 
     std::lock_guard lock(mutex_);
     reader_.close();
     last_frame_ = {};
-    pending_frame_ = {};
+    frame_queue_.clear();
+    recycled_frames_.clear();
     rendered_frame_.clear();
     allocator_.Reset();
     media_type_.Reset();
@@ -584,6 +661,10 @@ HRESULT MediaStream::start_locked(IMFMediaType* media_type, bool send_event) {
             return hr;
     }
     selected_ = true;
+    {
+        std::lock_guard lock(frame_mutex_);
+        frame_buffer_started_ = false;
+    }
     next_sample_time_ = 0;
     ++stream_generation_;
     state_ = MF_STREAM_STATE_RUNNING;
@@ -642,6 +723,43 @@ HRESULT MediaStream::allocate_sample(IMFVideoSampleAllocator* allocator,
     return allocated_buffer.CopyTo(buffer);
 }
 
+void MediaStream::collect_frames(std::stop_token stop_token) noexcept {
+    CaptureThreadScheduling scheduling;
+    FrameSnapshot incoming;
+    std::uint64_t previous_publication{};
+    while (!stop_token.stop_requested()) {
+        try {
+            if (!reader_.is_open()) {
+                if (channel_path_.empty()) discover_channel_path(channel_path_);
+                if (!channel_path_.empty() && FAILED(reader_.open(channel_path_.c_str())))
+                    channel_path_.clear();
+            }
+            if (reader_.read(incoming, previous_publication)) {
+                previous_publication = incoming.published_frames;
+                {
+                    std::lock_guard lock(frame_mutex_);
+                    frame_queue_.push_back(std::move(incoming));
+                    // A small bounded queue absorbs source delivery jitter.
+                    // Slow/paused clients always stay within five pictures
+                    // of the live publisher, including at native resolution.
+                    if (frame_queue_.size() > 5) {
+                        incoming = std::move(frame_queue_.front());
+                        frame_queue_.pop_front();
+                    } else if (!recycled_frames_.empty()) {
+                        incoming = std::move(recycled_frames_.front());
+                        recycled_frames_.pop_front();
+                    }
+                }
+                frame_condition_.notify_all();
+            }
+        } catch (...) {
+            // The sample thread can retain its last valid frame while a
+            // transient allocation/read failure recovers on the next poll.
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+
 HRESULT MediaStream::render_frame(IMFMediaBuffer* buffer,
                                   IMFMediaType* media_type,
                                   std::stop_token stop_token) {
@@ -652,26 +770,25 @@ HRESULT MediaStream::render_frame(IMFMediaBuffer* buffer,
                                    sample_size);
     if (FAILED(hr)) return hr;
 
-    const auto try_read_frame = [this]() {
-        if (!reader_.is_open()) {
-            if (channel_path_.empty()) discover_channel_path(channel_path_);
-            if (!channel_path_.empty() &&
-                FAILED(reader_.open(channel_path_.c_str())))
-                channel_path_.clear();
+    {
+        std::unique_lock lock(frame_mutex_);
+        if (!frame_buffer_started_) {
+            frame_condition_.wait_for(lock, stop_token, FirstFrameWait,
+                [this] { return !frame_queue_.empty(); });
+            if (!frame_queue_.empty()) {
+                frame_condition_.wait_for(lock, stop_token,
+                    std::chrono::nanoseconds(frame_duration_100ns_ * 300),
+                    [this] { return frame_queue_.size() >= 3; });
+                frame_buffer_started_ = true;
+            }
         }
-        return reader_.read(pending_frame_);
-    };
-    bool received_frame = try_read_frame();
-    if (!received_frame && last_frame_.pixels.empty()) {
-        const auto deadline = std::chrono::steady_clock::now() + FirstFrameWait;
-        while (!received_frame && !stop_token.stop_requested() &&
-               std::chrono::steady_clock::now() < deadline) {
-            std::this_thread::sleep_for(FirstFrameRetryInterval);
-            received_frame = try_read_frame();
+        if (stop_token.stop_requested()) return MF_E_SHUTDOWN;
+        if (!frame_queue_.empty()) {
+            if (!last_frame_.pixels.empty()) recycled_frames_.push_back(std::move(last_frame_));
+            last_frame_ = std::move(frame_queue_.front());
+            frame_queue_.pop_front();
         }
     }
-    if (stop_token.stop_requested()) return MF_E_SHUTDOWN;
-    if (received_frame) std::swap(last_frame_, pending_frame_);
     // Reuse the previous snapshot whenever the publisher is briefly between
     // valid frames instead of exposing transport timing as a black sample.
     const FrameSnapshot* frame = last_frame_.pixels.empty()
@@ -763,7 +880,7 @@ HRESULT MediaSource::RuntimeClassInitialize(IMFAttributes* activation_attributes
 
     UINT32 output_width{};
     UINT32 output_height{};
-    UINT32 frame_rate = 30;
+    UINT32 frame_rate{};
     if (activation_attributes != nullptr) {
         activation_attributes->GetUINT32(OutputWidthAttribute, &output_width);
         activation_attributes->GetUINT32(OutputHeightAttribute, &output_height);

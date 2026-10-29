@@ -3,6 +3,7 @@
 #include "Media/CoreMedia.h"
 #include "Media/H264.h"
 #include "Media/MediaFoundationDecoder.h"
+#include "Media/DecoderFallback.h"
 #include "Media/BundledH264Decoder.h"
 #include "Avc444Fixture.h"
 #include "Protocol/Plist.h"
@@ -1127,6 +1128,31 @@ void test_device_metadata_recovery() {
         "failed fresh read preserves display fields without reviving trust or Ready");
     check(detail::needs_device_metadata_refresh(false, failed, &failed),
         "unreadable cached device is retried on the next inventory poll");
+    check(!detail::needs_device_metadata_refresh(true, failed, nullptr, true),
+        "active wired devices never get a Lockdown probe, even with no cache");
+    check(detail::needs_device_metadata_refresh(true, failed, &failed, false),
+        "a blocked device can be freshly verified while another device streams");
+}
+
+void test_decoder_runtime_fallback_chain() {
+    std::size_t selected{}, attempts{};
+    const auto frame = iPhoneMirror::media::detail::decode_with_fallback([&] {
+        ++attempts;
+        if (selected < 2) throw std::runtime_error("configured transform rejected input");
+        return 42;
+    }, [&](const std::exception&) { return ++selected < 3; });
+    check(frame == 42 && selected == 2 && attempts == 3,
+        "hardware and DXVA first-input failures still reach the software candidate");
+    selected = attempts = 0;
+    bool exhausted{};
+    try {
+        (void)iPhoneMirror::media::detail::decode_with_fallback([&]() -> int {
+            ++attempts;
+            throw std::runtime_error("all transforms rejected input");
+        }, [&](const std::exception&) { return ++selected < 3; });
+    } catch (const std::runtime_error&) { exhausted = true; }
+    check(exhausted && attempts == 3,
+        "runtime decoder fallback stops after the final candidate");
 }
 
 void test_apple_usb_filter_safety() {
@@ -1475,7 +1501,8 @@ void test_media_foundation_decoder() {
     const auto sample = iPhoneMirror::coremedia::parse_sample_buffer(envelope.serialized_sample_buffer);
     check(sample.format.has_value(), "decoder fixture has video format");
     if (!sample.format) return;
-    iPhoneMirror::media::MediaFoundationH264Decoder decoder;
+    iPhoneMirror::media::MediaFoundationH264Decoder decoder(
+        iPhoneMirror::media::DecoderPreference::Auto, true);
     auto oversized = *sample.format;
     oversized.width = iPhoneMirror::media::detail::MaxDecodedVideoDimension + 1;
     check_throws([&] { decoder.configure(oversized, 60, 1); },
@@ -1498,6 +1525,25 @@ void test_media_foundation_decoder() {
         check(frames.back().width == 1126 && frames.back().height == 2436, "decoded NV12 dimensions match format");
         check(!frames.back().nv12.empty() || frames.back().gpu_frame,
             "decoded NV12 frame contains CPU pixels or a shared GPU frame");
+    }
+
+    // The hardware readback keeps one frame in flight. Draining must include
+    // the final picture with its original timestamp, and flushing must discard
+    // that pending picture before a new timeline starts.
+    decoder.flush();
+    frames.clear();
+    constexpr std::int64_t restarted_timestamp = 70'000'000;
+    for (int index = 0; index < 4; ++index) {
+        auto decoded = decoder.decode(sample.sample_data,
+            restarted_timestamp + static_cast<std::int64_t>(index) * 166667, 166667);
+        for (auto& frame : decoded) frames.push_back(std::move(frame));
+    }
+    for (auto& frame : decoder.drain()) frames.push_back(std::move(frame));
+    check(frames.size() == 4, "decoder drain includes every pipelined readback frame");
+    for (std::size_t index = 0; index < frames.size(); ++index) {
+        check(frames[index].timestamp_100ns == restarted_timestamp +
+            static_cast<std::int64_t>(index) * 166667,
+            "pipelined GPU readback preserves frame order and original timestamps after flush");
     }
 
     iPhoneMirror::media::MediaFoundationH264Decoder software_decoder(
@@ -2541,6 +2587,20 @@ void test_wireless_volume_before_connection() {
         "AirPlay disconnect clears the retained remote volume");
 }
 
+void test_wireless_partial_readiness() {
+    using namespace iPhoneMirror;
+    capture::WirelessReceiverHub hub;
+    wireless::MessageHeader ready{.type = wireless::MessageType::Ready,
+        .reserved = wireless::ReadyDlnaFailed};
+    capture::WirelessReceiverHubTestAccess::handle(hub, ready);
+    check(hub.ready() && hub.dlna_failed(),
+        "DLNA failure must remain visible while AirPlay is usable");
+    ready.reserved = 0;
+    capture::WirelessReceiverHubTestAccess::handle(hub, ready);
+    check(hub.ready() && !hub.dlna_failed(),
+        "DLNA recovery clears only the degraded service state");
+}
+
 void test_media_command_queue() {
     using iPhoneMirror::capture::MediaCastCommand;
     using iPhoneMirror::capture::MediaCastCommandType;
@@ -2718,10 +2778,15 @@ void test_logging_shutdown_boundary() {
 } // namespace
 
 int run_preview_opacity_smoke();
+void test_sdr_bgra_converter(bool benchmark = false);
 int run_wasapi_underrun_smoke();
 int run_preview_static_frame_smoke(bool retry_only = false);
 
 int main(int argc, char** argv) {
+    if (argc == 2 && std::string_view(argv[1]) == "--sdr-bgra-only") {
+        try { test_sdr_bgra_converter(true); return 0; }
+        catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
+    }
     if (argc == 3 && std::string_view(argv[1]) == "--usb-configure-only") {
         try {
             const auto selected = iPhoneMirror::transport::find_libusb0_device(argv[2]);
@@ -2858,7 +2923,9 @@ int main(int argc, char** argv) {
     }
     try {
         test_plist();
+        test_sdr_bgra_converter();
         test_device_metadata_recovery();
+        test_decoder_runtime_fallback_chain();
         test_quicktime_framing();
         test_gpu_frame_readback();
         test_h264();
@@ -2885,6 +2952,7 @@ int main(int argc, char** argv) {
         test_wireless_multi_stream_isolation();
         test_wireless_audio_only_stream();
         test_wireless_volume_before_connection();
+        test_wireless_partial_readiness();
         test_media_command_queue();
         test_logging_shutdown_boundary();
     } catch (const std::exception& error) {

@@ -35,9 +35,10 @@ inline void preserve_cached_device_display_metadata(
 }
 
 [[nodiscard]] inline bool needs_device_metadata_refresh(
-    bool requested, const DeviceRecord& current, const DeviceRecord* cached) noexcept {
-    return requested || !cached || !cached->lockdown_accessible ||
-        current.device_id != cached->device_id || current.mux_port != cached->mux_port;
+    bool requested, const DeviceRecord& current, const DeviceRecord* cached,
+    bool active_session = false) noexcept {
+    return !active_session && (requested || !cached || !cached->lockdown_accessible ||
+        current.device_id != cached->device_id || current.mux_port != cached->mux_port);
 }
 
 } // namespace detail
@@ -64,7 +65,8 @@ class DeviceManager {
 public:
     [[nodiscard]] EnvironmentRecord environment() const;
     [[nodiscard]] std::vector<DeviceRecord> refresh(
-        bool refresh_metadata = false);
+        bool refresh_metadata = false,
+        const std::vector<std::string>& excluded_identities = {});
 
 private:
     std::mutex metadata_mutex_;

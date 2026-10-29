@@ -1391,8 +1391,8 @@ int wmain(int argc, wchar_t** argv) {
     iPhoneMirror::wireless::DlnaRenderer dlna;
     const auto dlna_enabled = std::wstring_view(effective_mode) == L"media" ||
         std::wstring_view(effective_mode) == L"combined";
-    if (dlna_enabled) {
-        const auto dlna_started = dlna.start(utf8(dlna_receiver_name(effective_receiver_name)),
+    const auto start_dlna = [&] {
+        return dlna.start(utf8(dlna_receiver_name(effective_receiver_name)),
             stable_dlna_uuid(pairing_seed), static_cast<std::uint16_t>(dlna_port),
             static_cast<std::uint16_t>(dlna_ssdp_port), {
                 .play = [&callback](std::string_view url, double duration,
@@ -1418,16 +1418,19 @@ int wmain(int argc, wchar_t** argv) {
                         message);
                 },
             });
-        if (!dlna_started) {
-            writer.send_text(iPhoneMirror::wireless::MessageType::Log,
-                "wireless_host dlna_start_failed; udp_ports_may_be_in_use");
-        }
+    };
+    bool dlna_started = !dlna_enabled || start_dlna();
+    if (!dlna_started) {
+        writer.send_text(iPhoneMirror::wireless::MessageType::Log,
+            "wireless_host dlna_start_failed; retry_in_seconds=5; airplay_preserved=true");
     }
+    auto next_dlna_retry = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     writer.send_text(iPhoneMirror::wireless::MessageType::Log,
         std::format("wireless_host receiver_ready mode={} dlna_enabled={}",
             utf8(effective_mode), dlna_enabled));
     const auto ready_sent = writer.send(iPhoneMirror::wireless::MessageHeader{
-        .type = iPhoneMirror::wireless::MessageType::Ready});
+        .type = iPhoneMirror::wireless::MessageType::Ready,
+        .reserved = dlna_started ? 0U : iPhoneMirror::wireless::ReadyDlnaFailed});
     writer.send_text(iPhoneMirror::wireless::MessageType::Log,
         std::format("wireless_host ready_ipc sent={}", ready_sent));
 
@@ -1460,6 +1463,14 @@ int wmain(int argc, wchar_t** argv) {
     while (wait_count != 0) {
         const auto result = WaitForMultipleObjects(wait_count, waits, FALSE, 50);
         if (result == WAIT_TIMEOUT) {
+            if (!dlna_started && std::chrono::steady_clock::now() >= next_dlna_retry) {
+                dlna_started = start_dlna();
+                next_dlna_retry = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+                writer.send_text(iPhoneMirror::wireless::MessageType::Log,
+                    std::format("wireless_host dlna_retry success={}", dlna_started));
+                if (dlna_started) writer.send(iPhoneMirror::wireless::MessageHeader{
+                    .type = iPhoneMirror::wireless::MessageType::Ready});
+            }
             DWORD receive_error{};
             if (!receive_playback_updates(pipe, callback, dlna, &receive_error)) {
                 wait_reason = "ipc_disconnected_or_protocol_error";

@@ -52,6 +52,17 @@ install(TARGETS iPhoneMirror.WirelessHost iPhoneMirror.DnsSdShim
     RUNTIME DESTINATION Wireless)
 
 if(IPHONEMIRROR_BUILD_TESTS)
+    add_executable(iPhoneMirror.DlnaStartupRecovery.Tests tests/DlnaStartupRecoveryTests.cpp)
+    target_include_directories(iPhoneMirror.DlnaStartupRecovery.Tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_definitions(iPhoneMirror.DlnaStartupRecovery.Tests PRIVATE
+        UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_compile_options(iPhoneMirror.DlnaStartupRecovery.Tests PRIVATE /W4 /permissive- /utf-8 /EHsc)
+    target_link_libraries(iPhoneMirror.DlnaStartupRecovery.Tests PRIVATE ws2_32)
+    add_dependencies(iPhoneMirror.DlnaStartupRecovery.Tests
+        iPhoneMirror.WirelessHost iPhoneMirror.WirelessHost.Stub)
+    add_test(NAME DlnaStartupRecoveryTests COMMAND iPhoneMirror.DlnaStartupRecovery.Tests
+        $<TARGET_FILE:iPhoneMirror.WirelessHost> $<TARGET_FILE:iPhoneMirror.WirelessHost.Stub>)
+    set_tests_properties(DlnaStartupRecoveryTests PROPERTIES TIMEOUT 25)
     add_executable(iPhoneMirror.IpcWriter.Tests
         tests/IpcWriterTests.cpp DlnaRenderer.cpp)
     target_compile_definitions(iPhoneMirror.IpcWriter.Tests PRIVATE

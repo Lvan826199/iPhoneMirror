@@ -26,7 +26,8 @@ public:
     FramePublisher& operator=(const FramePublisher&) = delete;
     ~FramePublisher();
 
-    HRESULT open_for_current_user();
+    HRESULT open_for_current_user(std::uint32_t frame_rate = 30,
+        std::uint32_t output_width = 0, std::uint32_t output_height = 0);
     HRESULT publish(const std::uint8_t* pixels, std::uint32_t width,
                     std::uint32_t height, std::uint32_t stride,
                     std::int64_t timestamp_100ns);
@@ -57,7 +58,10 @@ public:
     ~FrameReader();
 
     HRESULT open(const wchar_t* channel_path);
-    bool read(FrameSnapshot& snapshot) const;
+    bool read(FrameSnapshot& snapshot, std::uint64_t after_published_frames = 0) const;
+    [[nodiscard]] std::uint32_t output_frame_rate() const noexcept;
+    [[nodiscard]] std::uint32_t output_width() const noexcept;
+    [[nodiscard]] std::uint32_t output_height() const noexcept;
     void close() noexcept;
     [[nodiscard]] bool is_open() const noexcept { return view_ != nullptr; }
 

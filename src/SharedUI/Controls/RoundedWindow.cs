@@ -10,6 +10,29 @@ namespace IPhoneMirror.UI.Controls;
 public class RoundedWindow : Window
 {
     private HwndSource? _source;
+    public static readonly DependencyProperty IsChromeCloseButtonProperty = DependencyProperty.RegisterAttached(
+        "IsChromeCloseButton", typeof(bool), typeof(RoundedWindow), new PropertyMetadata(false, OnChromeCloseButtonChanged));
+    public static bool GetIsChromeCloseButton(DependencyObject target) => (bool)target.GetValue(IsChromeCloseButtonProperty);
+    public static void SetIsChromeCloseButton(DependencyObject target, bool value) => target.SetValue(IsChromeCloseButtonProperty, value);
+
+    private static void OnChromeCloseButtonChanged(DependencyObject target, DependencyPropertyChangedEventArgs args)
+    {
+        if (target is not Button button) return;
+        if ((bool)args.NewValue) button.Loaded += PlaceCloseButton;
+        else button.Loaded -= PlaceCloseButton;
+    }
+
+    private static void PlaceCloseButton(object sender, RoutedEventArgs args)
+    {
+        var button = (Button)sender;
+        if (Window.GetWindow(button) is not RoundedWindow window ||
+            window.Template.FindName("PART_WindowActions", window) is not Panel host || button.Parent == host) return;
+        // Preserve the original handlers, accessible name and close-confirmation
+        // semantics; the window action alone stays outside the scrolling page.
+        if (button.Parent is not Panel parent) return;
+        parent.Children.Remove(button);
+        host.Children.Add(button);
+    }
 
     public RoundedWindow()
     {
@@ -24,10 +47,28 @@ public class RoundedWindow : Window
         base.OnSourceInitialized(e);
         _source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
         if (_source is null) return;
+        SizeForReadingText(this);
         _source.AddHook(WindowProcedure);
         // The alpha surface owns its silhouette; do not add a second DWM corner.
         var doNotRound = 1;
         _ = DwmSetWindowAttribute(_source.Handle, 33, ref doNotRound, sizeof(int));
+    }
+
+    internal static void SizeForReadingText(Window window)
+    {
+        var scale = window.TryFindResource("BodyFontSize") is double body ? body / 14 : 1;
+        if (scale <= 1 || window.WindowState != WindowState.Normal) return;
+        var source = HwndSource.FromHwnd(new WindowInteropHelper(window).Handle);
+        var monitor = new MonitorInfo { Size = (uint)Marshal.SizeOf<MonitorInfo>() };
+        if (source is null || !GetMonitorInfoW(MonitorFromWindow(source.Handle, 2), ref monitor)) return;
+        var transform = source.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+        var area = transform.Transform(new Vector(monitor.Work.Right - monitor.Work.Left,
+            monitor.Work.Bottom - monitor.Work.Top));
+        // Text scaling needs more line length as well as taller controls. Grow
+        // the initial dialog only; subsequent resizing remains the user's choice.
+        // Leave the full-page scroll fallback available on smaller displays.
+        if (!double.IsNaN(window.Width)) window.Width = Math.Max(window.MinWidth, Math.Min(window.Width * (1 + .35 * (scale - 1)), Math.Min(Math.Min(window.MaxWidth, Math.Max(window.Width, 1280)), area.X - 32)));
+        if (!double.IsNaN(window.Height)) window.Height = Math.Max(window.MinHeight, Math.Min(window.Height * (1 + .18 * (scale - 1)), Math.Min(Math.Min(window.MaxHeight, Math.Max(window.Height, 860)), area.Y - 32)));
     }
 
     protected override void OnClosed(EventArgs e)

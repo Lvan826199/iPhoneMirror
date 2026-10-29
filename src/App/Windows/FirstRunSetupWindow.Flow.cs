@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -103,7 +103,7 @@ public partial class FirstRunSetupWindow
                 HorizontalAlignment = HorizontalAlignment.Left, Margin = new(0, 0, 0, 16) };
             icon.SetResourceReference(System.Windows.Shapes.Path.StrokeProperty, "TextBrush"); panel.Children.Add(icon);
             var title = Text("SetupControl" + mode, 16); title.FontWeight = FontWeights.SemiBold; panel.Children.Add(title);
-            var detail = Text("SetupControlHint" + mode, 13); detail.LineHeight = 20;
+            var detail = Text("SetupControlHint" + mode, 13); detail.SetResourceReference(TextBlock.LineHeightProperty, "BodyLineHeight");
             detail.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush"); panel.Children.Add(detail);
             var border = new Border { Child = panel, Padding = new(18), MinHeight = 270, CornerRadius = new(14), BorderThickness = new(1), Margin = new(0, 0, 12, 12) };
             border.SetResourceReference(Border.BackgroundProperty, "CardBrush"); border.SetResourceReference(Border.BorderBrushProperty, "BorderSoftBrush");

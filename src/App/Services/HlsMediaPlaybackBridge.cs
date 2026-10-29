@@ -41,7 +41,7 @@ internal sealed class HlsMediaPlaybackBridge : IDisposable
 
     internal bool IsRunning => !_disposed && !_process.HasExited;
 
-    internal bool ExitedSuccessfully => _disposed ||
+    internal bool ExitedSuccessfully => !_disposed &&
         _process.HasExited && _process.ExitCode == 0;
 
     internal double DetectedDuration => Volatile.Read(ref _detectedDuration);

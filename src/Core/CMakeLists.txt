@@ -119,6 +119,7 @@ if(IPHONEMIRROR_BUILD_TESTS)
     add_test(NAME UsbDeviceReconnectTests COMMAND iPhoneMirror.UsbDeviceReconnect.Tests)
     add_executable(iPhoneMirror.Core.Tests
         tests/CoreTests.cpp
+        tests/SdrBgraConverterTests.cpp
         tests/PreviewOpacitySmoke.cpp
         tests/PreviewStaticFrameSmoke.cpp
         tests/WasapiUnderrunSmoke.cpp

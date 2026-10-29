@@ -14,7 +14,7 @@ namespace IPhoneMirror.App.Runtime.Tests;
 
 internal static partial class Program
 {
-    private static int RunDriverComboBoxTests(string assemblyPath)
+    private static int RunDriverComboBoxTests(string assemblyPath, string? layoutOutput = null)
     {
         RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         Assembly.Load("Wpf.Ui");
@@ -56,6 +56,11 @@ internal static partial class Program
         {
             window.Show();
             DrainDispatcher();
+            if (layoutOutput is not null)
+            {
+                AssertDriverWindowLayout(window, assembly, layoutOutput);
+                return 0;
+            }
             var combo = Visuals(window).OfType<ComboBox>()
                 .Single(control => ReferenceEquals(control.ItemsSource, connected));
             var advancedList = Visuals(window).OfType<ListBox>()
@@ -101,6 +106,97 @@ internal static partial class Program
             window.Close();
             app.Shutdown();
         }
+    }
+
+    private static void AssertDriverWindowLayout(Window window, Assembly assembly, string output)
+    {
+        Directory.CreateDirectory(output);
+        var app = Application.Current;
+        var appearance = assembly.GetType("IPhoneMirror.UI.Services.AccessibilityAppearance")!
+            .GetMethod("Apply", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var advancedProperty = window.GetType().GetProperty("IsAdvancedMode")!;
+        var footer = Visuals(window).OfType<Button>().Single(button =>
+            BindingOperations.GetBinding(button, Button.ContentProperty)?.Path.Path == "AdvancedButtonText");
+        var page = Visuals(window).OfType<ScrollViewer>().First();
+        window.GetType().GetField("_appleSupport", InteractionMembers)!.SetValue(window, Activator.CreateInstance(
+            assembly.GetType("IPhoneMirror.DriverInstaller.Models.AppleSupportStatus")!,
+            [true, true, "Apple Mobile Device Service", true, "oem3.inf", app.FindResource("AppleMuxReady"), true, false, null]));
+        window.GetType().GetField("_libUsb", InteractionMembers)!.SetValue(window, Activator.CreateInstance(
+            assembly.GetType("IPhoneMirror.DriverInstaller.Models.LibUsbStackStatus")!,
+            [true, true, true, "1.2.6.0", string.Format((string)app.FindResource("LibUsbRunning"), "1.2.6.0")]));
+        foreach (var property in new[] { "AppleStatusText", "LibUsbStatusText" })
+            window.GetType().GetMethod("OnPropertyChanged", InteractionMembers, [typeof(string)])!.Invoke(window, [property]);
+        window.GetType().GetProperty("OperationStatus")!.SetValue(window,
+            string.Format((string)app.FindResource("DevicesReady"), 2));
+        window.MinWidth = 0;
+        window.MinHeight = 0;
+        var count = 0;
+        foreach (var textScale in new[] { 1d, 2d })
+        foreach (var size in new[] { new Size(1180, 760), new Size(980, 640), new Size(800, 480) })
+        foreach (var advanced in new[] { false, true })
+        {
+            appearance.Invoke(null, [app, (double?)textScale, (bool?)false]);
+            advancedProperty.SetValue(window, advanced);
+            window.Width = size.Width;
+            window.Height = size.Height;
+            page.ScrollToTop();
+            DrainDispatcher();
+            AdvanceDispatcher(TimeSpan.FromMilliseconds(550));
+            window.UpdateLayout();
+            var label = $"{(advanced ? "advanced" : "simple")}-{size.Width}x{size.Height}-text{textScale}";
+            // Ordinary window sizes must show the footer without page scrolling.
+            // This catches a viewport-height minimum plus outer margins, even
+            // though the footer remains technically reachable via a scrollbar.
+            if (textScale == 1 && size.Height >= 640)
+            {
+                var bounds = footer.TransformToAncestor(window).TransformBounds(new Rect(footer.RenderSize));
+                InteractionAssert(bounds.Top >= 0 && bounds.Bottom <= window.ActualHeight - 10 && page.ScrollableHeight < 1,
+                    $"Driver footer must fit inside the window: {label}, bounds={bounds}, page overflow={page.ScrollableHeight}.");
+                if (!advanced)
+                {
+                    var simpleScroll = Visuals(window).OfType<ScrollViewer>().Single(scroll =>
+                        scroll.IsVisible && !ReferenceEquals(scroll, page));
+                    InteractionAssert(simpleScroll.ScrollableHeight < 1,
+                        $"The simple setup page must fit without scrolling at ordinary sizes: {label}, overflow={simpleScroll.ScrollableHeight}.");
+                }
+            }
+            if (advanced)
+            {
+                var actions = Visuals(window).OfType<Button>().Where(button =>
+                    BindingOperations.GetBinding(button, Button.ContentProperty)?.Path.Path == "InstallButtonText" ||
+                    Equals(button.Content, app.FindResource("Repair")) || Equals(button.Content, app.FindResource("Uninstall"))).ToArray();
+                InteractionAssert(actions.Length == 3 && actions.All(button => button.ActualHeight <= 72 * textScale),
+                    $"Driver actions must keep their natural button height: {label}, heights={string.Join(",", actions.Select(button => button.ActualHeight))}.");
+                foreach (var action in actions)
+                {
+                    for (DependencyObject? parent = VisualTreeHelper.GetParent(action); parent is not null;
+                         parent = VisualTreeHelper.GetParent(parent))
+                        if (parent is ScrollViewer scroll)
+                        {
+                            scroll.ScrollToEnd();
+                            DrainDispatcher();
+                            window.UpdateLayout();
+                        }
+                    action.BringIntoView();
+                    DrainDispatcher();
+                    var bounds = action.TransformToAncestor(window).TransformBounds(new Rect(action.RenderSize));
+                    if (bounds.Bottom > window.ActualHeight)
+                        SaveWindowRender(window, Path.Combine(output, label + "-failure.png"));
+                    InteractionAssert(bounds.Top >= 0 && bounds.Bottom <= window.ActualHeight,
+                        $"Driver action must be reachable by scrolling: {label}, {action.Content}, bounds={bounds}.");
+                }
+            }
+            footer.BringIntoView();
+            DrainDispatcher();
+            var footerBounds = footer.TransformToAncestor(window).TransformBounds(new Rect(footer.RenderSize));
+            if (footerBounds.Bottom > window.ActualHeight)
+                SaveWindowRender(window, Path.Combine(output, label + "-footer-failure.png"));
+            InteractionAssert(footerBounds.Top >= 0 && footerBounds.Bottom <= window.ActualHeight,
+                $"Driver footer must remain reachable with large text: {label}, bounds={footerBounds}, page={page.VerticalOffset}/{page.ScrollableHeight}.");
+            SaveWindowRender(window, Path.Combine(output, label + ".png"));
+            count++;
+        }
+        Console.WriteLine($"Driver layout regressions passed: {count} renders across simple/advanced layouts, three window sizes and 100%/200% text.");
     }
 
     private static void AssertDriverPopupInput(ComboBox combo, int index)

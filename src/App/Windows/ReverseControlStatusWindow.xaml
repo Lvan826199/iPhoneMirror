@@ -8,7 +8,7 @@
         ResizeMode="NoResize" WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Foreground="{DynamicResource TextBrush}"
         xmlns:chrome="clr-namespace:IPhoneMirror.UI.Controls"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent">
-    <Border Padding="{StaticResource DialogPadding}" Style="{StaticResource RoundedWindowContent}">
+    <Border Padding="{DynamicResource DialogPadding}" Style="{StaticResource RoundedWindowContent}">
         <Grid animations:PageTransition.IsEnabled="True">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/><RowDefinition Height="16"/>

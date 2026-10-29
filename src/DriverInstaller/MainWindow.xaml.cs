@@ -131,6 +131,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         Closed += (_, _) => { _closed = true; _deviceRefresh.Stop(); _deviceSource?.RemoveHook(DeviceMessage); };
     }
 
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        IPhoneMirror.UI.Controls.RoundedWindow.SizeForReadingText(this);
+    }
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (_previewOnly) return;

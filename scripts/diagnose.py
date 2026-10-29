@@ -13,8 +13,11 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-BIN = ROOT / "outputs" / "iPhoneMirror"
-os.add_dll_directory(str(BIN))
+_runtime_arguments = argparse.ArgumentParser(add_help=False)
+_runtime_arguments.add_argument("--runtime-dir", type=Path, default=ROOT / "outputs" / "iPhoneMirror")
+_runtime_options, _ = _runtime_arguments.parse_known_args()
+BIN = _runtime_options.runtime_dir.resolve()
+_dll_directory = os.add_dll_directory(str(BIN))
 core = ctypes.CDLL(str(BIN / "iPhoneMirror.Core.dll"))
 
 
@@ -69,6 +72,9 @@ class CaptureStatus(ctypes.Structure):
         ("audio_packets", ctypes.c_uint64),
         ("audio_sample_rate", ctypes.c_uint32),
         ("audio_channels", ctypes.c_uint32),
+        ("failure_kind", ctypes.c_int32),
+        ("failure_stage", ctypes.c_int32),
+        ("error_code", ctypes.c_int32),
         ("message", ctypes.c_wchar * 192),
     ]
 
@@ -148,6 +154,7 @@ def capture(
                 "video_frames": status.video_frames,
                 "audio_packets": status.audio_packets,
                 "audio": [status.audio_sample_rate, status.audio_channels],
+                "failure": [status.failure_kind, status.failure_stage, status.error_code],
             }, ensure_ascii=False))
             if status.state == 7:
                 raise RuntimeError(status.message)
@@ -190,8 +197,12 @@ def capture(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--runtime-dir", type=Path, default=BIN,
+                        help="directory containing the actual native Core and its USB DLLs")
     parser.add_argument("--capture", metavar="UDID")
     parser.add_argument("--seconds", type=float, default=10.0)
+    parser.add_argument("--cycles", type=int, default=1,
+                        help="repeat capture/stop against the same device to verify restart")
     parser.add_argument("--save-frame", type=Path)
     parser.add_argument("--render-width", "--width", dest="width", type=int, default=0,
                         help="local D3D render-limit width; headless capture only stores it")
@@ -257,8 +268,12 @@ def main() -> None:
                 parser.error("--width and --height must both be zero or both be non-zero")
             if not 0.0 <= args.volume <= 1.0:
                 parser.error("--volume must be between 0.0 and 1.0")
-            capture(args.capture, args.seconds, args.save_frame,
-                    args.width, args.height, args.fps, not args.mute, args.volume)
+            if args.cycles < 1 or args.cycles > 10 or args.seconds <= 0:
+                parser.error("--cycles must be 1..10 and --seconds must be positive")
+            for cycle in range(1, args.cycles + 1):
+                print(json.dumps({"capture_cycle": cycle, "cycles": args.cycles}))
+                capture(args.capture, args.seconds, args.save_frame,
+                        args.width, args.height, args.fps, not args.mute, args.volume)
     finally:
         core.im_shutdown()
 

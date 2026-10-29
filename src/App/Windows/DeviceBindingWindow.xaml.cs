@@ -260,11 +260,11 @@ public partial class DeviceBindingWindow : IPhoneMirror.UI.Controls.RoundedWindo
             else ActivityText = L("SetupCancelled");
         }
         catch (OperationCanceledException) { ActivityText = L("SetupCancelled"); }
-        catch (Exception error) { ActivityText = error.Message; }
+        catch (Exception error) { ActivityText = RecordFailure("device_binding_bluetooth_start_failed", "DeviceBindingOperationFailed", error); }
         finally
         {
             try { await _viewModel.StopBluetoothPeripheralConfigurationAsync(); }
-            catch (Exception error) { ActivityText = error.Message; }
+            catch (Exception error) { ActivityText = RecordFailure("device_binding_bluetooth_stop_failed", "DeviceBindingOperationFailed", error); }
             IsWorking = false;
             if (_closeRequested) Close();
         }
@@ -307,7 +307,7 @@ public partial class DeviceBindingWindow : IPhoneMirror.UI.Controls.RoundedWindo
         catch (Exception error)
         {
             _airPlayFailed = true;
-            if (!_closed && !IsWorking) ActivityText = error.Message;
+            if (!_closed && !IsWorking) ActivityText = RecordFailure("device_binding_airplay_failed", "SetupAirPlayFailed", error);
         }
         finally { _airPlayStarting = false; if (!_closed) NotifyAirPlayReceiver(); }
     }
@@ -348,12 +348,18 @@ public partial class DeviceBindingWindow : IPhoneMirror.UI.Controls.RoundedWindo
                         await RefreshBluetoothClientsAsync();
                     }
                     catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { break; }
-                    catch (Exception error) { if (!_closed) ActivityText = error.Message; }
+                    catch (Exception error) { if (!_closed) ActivityText = RecordFailure("device_binding_refresh_failed", "DeviceBindingRefreshFailed", error); }
                 }
                 await Task.Delay(1800, _lifetime.Token);
             }
         }
         catch (OperationCanceledException) { }
+    }
+
+    private static string RecordFailure(string eventName, string resourceKey, Exception error)
+    {
+        DiagnosticLogger.Exception("device-binding", eventName, error);
+        return LocalizationService.ErrorMessage(error, resourceKey);
     }
     private void UnbindWiredClick(object sender, RoutedEventArgs e) => Unbind(DeviceIdentityType.Wired);
     private void UnbindAirPlayClick(object sender, RoutedEventArgs e) => Unbind(DeviceIdentityType.AirPlay);

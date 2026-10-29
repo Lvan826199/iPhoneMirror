@@ -35,6 +35,8 @@ internal sealed class MediaCastReceiverController(
             var status = core.GetMediaCastReceiverStatus();
             Running = status.Running;
             Ready = status.Ready;
+            _startError = status.PartialFailure
+                ? LocalizationService.Get("DlnaRecovering") : null;
             if (Running) return true;
             if (DateTime.UtcNow < _automaticStartNotBeforeUtc) return false;
             if (_receiver.GetExecutablePath(WirelessReceiverBackend.Original) is not
@@ -81,7 +83,7 @@ internal sealed class MediaCastReceiverController(
         if (!SupportsCurrentWirelessBackend)
             return LocalizationService.Get("MediaCastRequiresOriginalBackend");
         if (!IsAvailable) return LocalizationService.Get("MediaCastReceiverMissing");
-        if (!Running && !string.IsNullOrWhiteSpace(_startError))
+        if (!string.IsNullOrWhiteSpace(_startError))
             return LocalizationService.Format("StartFailedFormat", _startError);
         return LocalizationService.Get(Ready ? "MediaCastReady" : "MediaCastStarting");
     }

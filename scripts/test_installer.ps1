@@ -5,6 +5,7 @@ param(
     [ValidatePattern('^\d+\.\d+\.\d+$')]
     [string]$PreviousVersion = '1.6.7',
     [string]$RuntimeTestDirectory,
+    [string]$EvidenceDirectory,
     [switch]$UseReleaseCompression
 )
 
@@ -125,7 +126,17 @@ function Uninstall-TestVersion([string]$UserDataArgument, [string]$Description,
 }
 
 Assert-SafeTestPath $WorkRoot
+$evidencePath = $null
+if ($EvidenceDirectory) {
+    $evidencePath = [IO.Path]::GetFullPath($EvidenceDirectory)
+    if ($evidencePath.StartsWith([IO.Path]::GetFullPath($WorkRoot) + '\',
+            [StringComparison]::OrdinalIgnoreCase) -or $evidencePath -eq $WorkRoot) {
+        throw 'Installer evidence must be outside the temporary test directory.'
+    }
+}
 $DriverProcess = $null
+$ValidationPassed = $false
+$PublishedFileCount = 0
 try {
     $publishedExecutable = Join-Path $SourceDirectory 'iPhoneMirror.exe'
     if (-not (Test-Path -LiteralPath $publishedExecutable -PathType Leaf)) {
@@ -229,6 +240,7 @@ try {
         }
     }
     Write-Host "Installed payload: $($publishedFiles.Count) files match published SHA-256 values."
+    $PublishedFileCount = $publishedFiles.Count
     Assert-UsbTouchBridgeRuntime (Join-Path $InstallDirectory 'tools') `
         'Installed USB touch bridge runtime'
     $installedBridgeLibUsb0 = Join-Path $InstallDirectory `
@@ -258,6 +270,9 @@ try {
         Invoke-Checked $runtimeRunner @('--component-runtime') 'Installed component functional regression'
         Invoke-Checked $runtimeRunner @('--component-audio-formats',
             (Join-Path $SourceDirectory 'tools\ffmpeg\ffmpeg.exe')) 'Installed source audio compatibility'
+        Invoke-Checked $runtimeRunner @('--retry-fallback-regressions',
+            (Join-Path $InstallDirectory 'Wireless\iPhoneMirror.WirelessHost.exe')) 'Installed retry and fallback regressions'
+        Invoke-Checked $runtimeRunner @('--capture-review') 'Installed capture and recording regressions'
         # Harness files are not installer-owned. Remove only these four copied
         # files before checking that the product uninstalls cleanly.
         foreach ($name in @('IPhoneMirror.App.Runtime.Tests.exe',
@@ -317,11 +332,29 @@ try {
     if (Test-Path -LiteralPath $UserDataDirectory) {
         throw 'Uninstall did not delete isolated user data when requested.'
     }
+    $ValidationPassed = $true
     Write-Host 'Installer upgrade and uninstall tests passed.' -ForegroundColor Green
 }
 finally {
     if ($null -ne $DriverProcess -and -not $DriverProcess.HasExited) {
         Stop-Process -Id $DriverProcess.Id -Force -ErrorAction SilentlyContinue
+    }
+    if ($evidencePath) {
+        New-Item -ItemType Directory -Force -Path $evidencePath | Out-Null
+        if (Test-Path -LiteralPath $WorkRoot) {
+            Get-ChildItem -LiteralPath $WorkRoot -Filter '*.log' -File |
+                Copy-Item -Destination $evidencePath -Force
+        }
+        [ordered]@{
+            Passed = $ValidationPassed
+            Version = $Version
+            PreviousVersion = $PreviousVersion
+            PreviousPayload = 'Current payload with previous installer metadata; packaging upgrade simulation'
+            ReleaseCompression = [bool]$UseReleaseCompression
+            InstalledFilesVerified = $PublishedFileCount
+            RuntimeRegressions = [bool]$RuntimeTestDirectory
+            CompletedUtc = [DateTime]::UtcNow.ToString('o')
+        } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $evidencePath 'result.json') -Encoding utf8
     }
     if (Test-Path -LiteralPath $StartMenuDirectory) {
         Remove-Item -LiteralPath $StartMenuDirectory -Recurse -Force

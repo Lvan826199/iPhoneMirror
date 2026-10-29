@@ -31,7 +31,7 @@
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}"/>
-            <Setter Property="Padding" Value="{StaticResource CardPadding}"/>
+            <Setter Property="Padding" Value="{DynamicResource CardPadding}"/>
             <Setter Property="Effect">
                 <Setter.Value>
                     <DropShadowEffect BlurRadius="18" ShadowDepth="3" Direction="270"

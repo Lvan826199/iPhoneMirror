@@ -343,7 +343,11 @@ internal static partial class Program
                     AwaitBinding(Start(true));
                     BindingAssert(control.Stopping && !control.Starting && !teardown.IsCompleted,
                         "Retry or mode switch bypassed capture teardown's cleanup wait.");
-                    NoResources(control);
+                    if (phase == "stop")
+                        BindingAssert(ReferenceEquals(control.WiredBridge, bridge) &&
+                            !control.Enabled && !control.InputEnabled && control.Router.Mode == ReverseControlMode.None,
+                            "A pending stop must retain its original bridge and reject input until cleanup completes.");
+                    else NoResources(control);
                 }
                 finally
                 {

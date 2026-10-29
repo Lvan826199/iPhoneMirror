@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
@@ -268,9 +268,10 @@ internal static partial class Program
             manualDisplay.Close();
             Console.WriteLine("PASS setup opens automatically once and remains available manually with unfinished progress.");
             var count = 0;
-            foreach (var culture in new[] { "zh-CN", "zh-TW", "zh-HK", "en-US" })
+            foreach (var culture in ReviewCapture ? new[] { "zh-CN" } : IPhoneMirror.UI.Services.SupportedUiCultures.All)
             foreach (var theme in new[] { AppTheme.Light, AppTheme.Dark })
             foreach (var width in new[] { 600, 880 })
+            foreach (var textScale in new[] { 1d, 2d })
             {
                 language.Invoke(null, [culture, false, false]); ThemeService.Apply(theme);
                 foreach (var step in Enum.GetValues<SetupStep>().Where(s => s is not (SetupStep.Devices or SetupStep.WiredControl or SetupStep.WirelessControl or SetupStep.WirelessIntroduction or SetupStep.BluetoothIntroduction)))
@@ -289,19 +290,34 @@ internal static partial class Program
                     window.State.Step = step;
                     try
                     {
-                        window.Show(); render.Invoke(window, null); window.UpdateLayout();
+                        window.Show(); render.Invoke(window, null);
+                        IPhoneMirror.UI.Services.AccessibilityAppearance.Apply(app, textScale, false);
+                        window.UpdateLayout();
+                        var scrollbarFindings = new HashSet<string>();
+                        AuditScrollBarLayout(window, $"{culture}/{theme}/{step}/{width}/{textScale}", scrollbarFindings);
+                        Check(scrollbarFindings.Count == 0, string.Join(Environment.NewLine, scrollbarFindings));
                         if (step == SetupStep.ControlIntroduction)
                             Check(!ComponentVisuals<CheckBox>(window).Any(), "Control introduction still asks users to enable individual features.");
                         Check(window.OwnedWindows.Count == 0, "Setup spawned another window.");
                         if (width == 880)
                         {
                             var scroll = (ScrollViewer)window.FindName("Scroller");
-                            Check(scroll.ScrollableHeight <= 1, $"Default-size page requires scrolling: {culture}/{theme}/{step}: {scroll.ScrollableHeight}");
+                            // Enlarged/translated content may legitimately scroll. Verify
+                            // that its end is reachable rather than requiring no overflow.
+                            if (scroll.ScrollableHeight > 1)
+                            {
+                                Check(scroll.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled,
+                                    $"Setup content cannot scroll: {culture}/{theme}/{step}/{textScale}");
+                                scroll.ScrollToEnd(); AdvanceDispatcher(TimeSpan.FromMilliseconds(20)); window.UpdateLayout();
+                                Check(scroll.VerticalOffset >= scroll.ScrollableHeight - 1,
+                                    $"Setup content end is unreachable: {culture}/{theme}/{step}/{textScale}");
+                                scroll.ScrollToTop(); window.UpdateLayout();
+                            }
                             foreach (var card in ComponentVisuals<RadioButton>(window))
                             foreach (var text in ComponentVisuals<TextBlock>(card))
                             {
                                 var bounds = text.TransformToAncestor(card).TransformBounds(new Rect(text.RenderSize));
-                                Check(bounds.Bottom <= card.ActualHeight + 1 && bounds.Right <= card.ActualWidth + 1, $"Clipped card text: {culture}/{step}/{text.Text}");
+                                Check(bounds.Top >= -1 && bounds.Left >= -1 && bounds.Bottom <= card.ActualHeight + 1 && bounds.Right <= card.ActualWidth + 1, $"Clipped card text: {culture}/{step}/{textScale}/{text.Text}");
                             }
                         }
                         var indicator = (Grid)window.FindName("StepIndicator");
@@ -318,12 +334,14 @@ internal static partial class Program
                             Check(!((Button)window.FindName("Next")).IsEnabled, "Unverified hardware advanced: " + step);
                         foreach (var text in ComponentVisuals<TextBlock>(window))
                             Check(!text.Text.StartsWith("Setup", StringComparison.Ordinal), "Missing localization: " + text.Text);
-                        if (width == 880 && culture == "zh-CN" || width == 600 && culture == "en-US" && step is SetupStep.Preferences or SetupStep.ControlIntroduction or SetupStep.Usage)
+                        if (ReviewCapture)
+                            SaveWindowRender(window, Path.Combine(output, $"{culture}-{theme}-{width}-{textScale}-{step}.png"));
+                        else if (width == 880 && culture == "zh-CN" || width == 600 && culture == "en-US" && step is SetupStep.Preferences or SetupStep.ControlIntroduction or SetupStep.Usage)
                         {
                             var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
                             bitmap.Render(window);
                             var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap));
-                            using var file = File.Create(Path.Combine(output, $"{culture}-{theme}-{width}-{step}.png")); png.Save(file);
+                            using var file = File.Create(Path.Combine(output, $"{culture}-{theme}-{width}-{textScale}-{step}.png")); png.Save(file);
                         }
                         if (width == 880 && culture == "zh-CN" && step == SetupStep.Usage)
                         {
@@ -342,7 +360,14 @@ internal static partial class Program
                             while (nextPage?.IsEnabled == true)
                             {
                                 nextPage.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent)); window.UpdateLayout();
-                                Check(((ScrollViewer)window.FindName("Scroller")).ScrollableHeight <= 1, "A later option/device page required scrolling.");
+                                var pageScroll = (ScrollViewer)window.FindName("Scroller");
+                                if (pageScroll.ScrollableHeight > 1)
+                                {
+                                    pageScroll.ScrollToEnd(); AdvanceDispatcher(TimeSpan.FromMilliseconds(20)); window.UpdateLayout();
+                                    Check(pageScroll.VerticalOffset >= pageScroll.ScrollableHeight - 1,
+                                        "A later option/device page cannot reach its enlarged content.");
+                                    pageScroll.ScrollToTop(); window.UpdateLayout();
+                                }
                             }
                             while (previousPage?.IsEnabled == true)
                             {
@@ -390,9 +415,12 @@ internal static partial class Program
                     finally { window.Close(); }
                     Check(!vm.SetupActive, "Setup lifecycle flag leaked."); count++;
                 }
-                Console.WriteLine($"PASS layouts {culture}/{theme}/{width}");
+                Console.WriteLine($"PASS layouts {culture}/{theme}/{width}/text={textScale}");
             }
             Console.WriteLine($"PASS {count} page/theme/language/size layouts, navigation bounds, hardware gates, close confirmation and lifecycle cleanup.");
+            // Subsequent animation geometry assertions use the normal text
+            // scale, independent of the last (200%) layout-matrix case.
+            IPhoneMirror.UI.Services.AccessibilityAppearance.Apply(app, 1, false);
             // Exercise the production animation path on choice-only pages: no hardware is started.
             var animationStore = new FirstRunSetupStore(Path.Combine(output, "animation-preview.json"));
             animationStore.Save(new() { Step = SetupStep.Usage, Usage = SetupUsage.MirrorAndControl });

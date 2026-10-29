@@ -8,6 +8,8 @@ namespace iPhoneMirror::wireless {
 inline constexpr std::uint32_t IpcMagic = 0x50414D49U; // IMAP
 inline constexpr std::uint16_t IpcVersion = 8;
 inline constexpr std::uint32_t MaxPayloadBytes = 64U * 1024U * 1024U;
+// Ready remains usable for AirPlay; this bit reports a degraded DLNA service.
+inline constexpr std::uint32_t ReadyDlnaFailed = 1U;
 inline constexpr std::size_t DeviceIdBytes = 64;
 inline constexpr std::size_t DeviceNameBytes = 128;
 inline constexpr std::size_t ProductTypeBytes = 64;

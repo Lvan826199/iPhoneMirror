@@ -28,6 +28,7 @@ public partial class AdvancedSettingsWindow : IPhoneMirror.UI.Controls.RoundedWi
             width < 16 || height < 16 || width > 8192 || height > 8192)
         {
             ErrorText.Text = LocalizationService.Get("AdvancedResolutionInvalid");
+            ErrorText.BringIntoView();
             return;
         }
         RequestedWidth = width;

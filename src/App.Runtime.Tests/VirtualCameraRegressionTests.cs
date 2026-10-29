@@ -19,10 +19,22 @@ internal static partial class Program
     private static async Task TestVirtualCameraRegressionsAsync()
     {
         TestVirtualCameraElevationBootstrap();
+        var normalizeSize = typeof(App).Assembly.GetType(
+            "IPhoneMirror.App.ViewModels.MainViewModel", true)!.GetMethod(
+            "NormalizeVirtualCameraSize", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var portraitSize = ((uint Width, uint Height))normalizeSize.Invoke(null, [1082U, 2340U])!;
+        InteractionAssert(portraitSize == (1088U, 2340U),
+            "Native portrait camera output was downscaled to 2160 pixels high.");
+        var boundedSize = ((uint Width, uint Height))normalizeSize.Invoke(null, [3840U, 3840U])!;
+        InteractionAssert((ulong)boundedSize.Width * boundedSize.Height <= 3840UL * 2160,
+            "Portrait camera output exceeded the shared 4K allocation limit.");
         // These independent services use only managed native-operation substitutes.
         // No test probes, registers, starts or stops a Windows camera device.
         await Task.WhenAll(
             TestVirtualCameraStaticFramesAsync(),
+            TestVirtualCamera60FpsAsync(),
+            TestVirtualCameraSourceDrivenAsync(),
+            TestVirtualCameraUnclockedSourceAsync(),
             TestVirtualCameraMissingFramesAsync(initiallyAvailable: false),
             TestVirtualCameraMissingFramesAsync(initiallyAvailable: true),
             TestVirtualCameraDestroyedSourceAsync(),
@@ -109,6 +121,34 @@ internal static partial class Program
         fixture.AssertStopped(failed: false);
     }
 
+    private static async Task TestVirtualCamera60FpsAsync()
+    {
+        var sourceClock = Stopwatch.StartNew();
+        await using var fixture = new VirtualCameraFixture(() =>
+        {
+            var sourceFrame = (long)(sourceClock.Elapsed.TotalSeconds * 60);
+            return new VideoFrame(2, 2, 8, sourceFrame * (10_000_000 / 60),
+                Enumerable.Repeat((byte)(sourceFrame % 256), 16).ToArray());
+        },
+            frameRate: 60);
+        await fixture.StartAsync();
+        await fixture.Published.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var initial = fixture.Frames.Count;
+        var clock = Stopwatch.StartNew();
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        var fps = (fixture.Frames.Count - initial) / clock.Elapsed.TotalSeconds;
+        var changedFps = fixture.Frames.Skip(initial)
+            .Select(frame => frame.Timestamp100Ns).Distinct().Count() /
+            clock.Elapsed.TotalSeconds;
+        Console.WriteLine($"Virtual camera managed publish rate: {fps:F2} fps, changing source: {changedFps:F2} fps");
+        InteractionAssert(fps > 50,
+            $"Selected 60 fps camera published only {fps:F2} fps.");
+        InteractionAssert(changedFps > 50,
+            $"Selected 60 fps camera forwarded only {changedFps:F2} distinct source frames per second.");
+        await fixture.StopAsync();
+        fixture.AssertStopped(failed: false);
+    }
+
     private static async Task TestVirtualCameraMissingFramesAsync(bool initiallyAvailable)
     {
         var first = new VideoFrame(2, 2, 8, 1, new byte[16]);
@@ -127,6 +167,48 @@ internal static partial class Program
             "A temporary unavailable read must not cause an immediate timeout.");
     }
 
+    private static async Task TestVirtualCameraSourceDrivenAsync()
+    {
+        var clock = Stopwatch.StartNew();
+        long SourceTimestamp() => (long)(clock.Elapsed.TotalSeconds * 60);
+        var reads = 0;
+        VideoFrame? held = null;
+        var hold = false;
+        var unavailable = false;
+        await using var fixture = new VirtualCameraFixture(() =>
+        {
+            Interlocked.Increment(ref reads);
+            if (unavailable) return null;
+            if (hold) return held;
+            // Model the native conversion cost so the test catches a second
+            // independent 60 Hz sample clock losing otherwise available frames.
+            var frame = new VideoFrame(2, 2, 8, SourceTimestamp(), new byte[16]);
+            Thread.Sleep(5);
+            return frame;
+        }, frameRate: 60, timestampProvider: _ => hold ? held!.Timestamp100Ns : SourceTimestamp());
+        await fixture.StartAsync();
+        await fixture.Published.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var initial = fixture.Frames.Count;
+        var measured = Stopwatch.StartNew();
+        await Task.Delay(2000);
+        var fps = fixture.Frames.Skip(initial).Select(f => f.Timestamp100Ns).Distinct().Count() /
+            measured.Elapsed.TotalSeconds;
+        InteractionAssert(fps > 56, $"Source-driven camera lost too many available frames: {fps:F2} fps.");
+
+        held = new VideoFrame(2, 2, 8, 0, new byte[16]);
+        hold = true;
+        await fixture.WaitForFrameAsync(held);
+        var staticReads = Volatile.Read(ref reads);
+        await Task.Delay(350);
+        InteractionAssert(Volatile.Read(ref reads) - staticReads < 8,
+            "Static source repeatedly performed an unnecessary full-frame conversion.");
+        held = held with { Pixels = Enumerable.Repeat((byte)42, 16).ToArray() };
+        await fixture.WaitForFrameAsync(held);
+        unavailable = true;
+        await fixture.Completed.Task.WaitAsync(TimeSpan.FromSeconds(7));
+        fixture.AssertStopped(failed: true);
+    }
+
     private static async Task TestVirtualCameraDestroyedSourceAsync()
     {
         var reads = 0;
@@ -139,6 +221,24 @@ internal static partial class Program
         fixture.AssertStopped(failed: true);
         InteractionAssert(fixture.Frames.Count == 1,
             "An explicitly destroyed source must not keep publishing its cached frame.");
+    }
+
+    private static async Task TestVirtualCameraUnclockedSourceAsync()
+    {
+        long frames = 0;
+        await using var fixture = new VirtualCameraFixture(() =>
+            new VideoFrame(2, 2, 8, Interlocked.Increment(ref frames), new byte[16]),
+            frameRate: 60, timestampProvider: _ => null);
+        await fixture.StartAsync();
+        await fixture.Published.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var initial = fixture.Frames.Count;
+        var clock = Stopwatch.StartNew();
+        await Task.Delay(2000);
+        var fps = (fixture.Frames.Count - initial) / clock.Elapsed.TotalSeconds;
+        InteractionAssert(fps is > 50 and < 70,
+            $"A source without a separate timestamp lost its selected cadence: {fps:F2} fps.");
+        await fixture.StopAsync();
+        fixture.AssertStopped(failed: false);
     }
 
     private static async Task TestVirtualCameraCancellationAsync()
@@ -254,6 +354,7 @@ internal static partial class Program
         private int _starts;
         private int _stops;
         private int _terminalEvents;
+        private readonly int _frameRate;
 
         internal ConcurrentQueue<VideoFrame> Frames { get; } = new();
         internal TaskCompletionSource Published { get; } =
@@ -266,8 +367,10 @@ internal static partial class Program
         internal int NativeStops => Volatile.Read(ref _stops);
 
         internal VirtualCameraFixture(Func<VideoFrame?> provider, int publishResult = 0,
-            Action? onStop = null, int startResult = 0, Action? onStarted = null)
+            Action? onStop = null, int startResult = 0, Action? onStarted = null,
+            int frameRate = 30, Func<ulong, long?>? timestampProvider = null)
         {
+            _frameRate = frameRate;
             _service = Activator.CreateInstance(_type, Members, binder: null,
                 args:
                 [
@@ -279,7 +382,7 @@ internal static partial class Program
                     }),
                     (Func<uint, uint, int, int>)((width, height, fps) =>
                     {
-                        InteractionAssert(width == 2 && height == 2 && fps == 30,
+                        InteractionAssert(width == 2 && height == 2 && fps == _frameRate,
                             "Unexpected native camera start parameters.");
                         Interlocked.Increment(ref _starts);
                         return startResult;
@@ -296,6 +399,7 @@ internal static partial class Program
                         onStop?.Invoke();
                         return 0;
                     }),
+                    timestampProvider,
                 ], culture: null)!;
             _type.GetEvent("StatusChanged", Members)!.GetAddMethod(nonPublic: true)!
                 .Invoke(_service,
@@ -315,7 +419,7 @@ internal static partial class Program
 
         internal Task StartAsync(CancellationToken cancellationToken = default) =>
             (Task)_type.GetMethod("StartAsync", Members)!.Invoke(_service,
-                [42UL, 2U, 2U, 30, cancellationToken])!;
+                [42UL, 2U, 2U, _frameRate, cancellationToken])!;
 
         internal Task StopAsync() =>
             (Task)_type.GetMethod("StopAsync", Members)!.Invoke(_service, null)!;

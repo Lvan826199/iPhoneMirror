@@ -9,16 +9,16 @@ namespace IPhoneMirror.App.Runtime.Tests;
 
 internal static partial class Program
 {
-    private static void TestParallelMediaOutputUi()
+    private static void TestParallelMediaOutputUi(string? output = null)
     {
         var previous = SynchronizationContext.Current;
         SynchronizationContext.SetSynchronizationContext(
             new System.Windows.Threading.DispatcherSynchronizationContext());
-        try { TestParallelMediaOutputUiCore(); }
+        try { TestParallelMediaOutputUiCore(output); }
         finally { SynchronizationContext.SetSynchronizationContext(previous); }
     }
 
-    private static void TestParallelMediaOutputUiCore()
+    private static void TestParallelMediaOutputUiCore(string? output)
     {
         using var fixture = new CaptureReviewFixture();
         var vm = (MainViewModel)fixture.Vm;
@@ -35,6 +35,7 @@ internal static partial class Program
             true, true, true, true, true, true, true, "libx264", "unused", ""));
         outputs.StatusChanged += (status, failed) => KeyboardCall(vm, "OnMediaOutputStatusChanged", status, failed);
         var window = new MediaOutputSettingsWindow(vm) { ShowInTaskbar = false, ShowActivated = false };
+        if (output is not null) Directory.CreateDirectory(output);
         // Load the real controls, but don't probe external components or
         // enumerate hardware: this fixture supplies output capabilities.
         window.Loaded -= (RoutedEventHandler)Delegate.CreateDelegate(typeof(RoutedEventHandler), window,
@@ -43,10 +44,26 @@ internal static partial class Program
         Task<(bool Success, string Message)> Start(MediaOutputKind kind) =>
             (Task<(bool Success, string Message)>)KeyboardCall(vm, "StartMediaOutputAsync",
                 new MediaOutputRequest(kind, "unused", 160, 160, 20, 500))!;
+        void Capture(string name)
+        {
+            AdvanceDispatcher(TimeSpan.FromMilliseconds(80)); window.UpdateLayout();
+            if (output is not null) SaveWindowRender(window, Path.Combine(output, name + ".png"));
+        }
         try
         {
             window.Show();
             window.UpdateLayout();
+            var tabs = Visuals(window).OfType<TabControl>().First();
+            var recordButton = (Button)window.FindName("StartRecordingButton");
+            var streamButton = (Button)window.FindName("StartStreamingButton");
+            var cameraButton = (Button)window.FindName("StartVirtualCameraButton");
+            foreach (var name in new[] { "RecordWidthBox", "RecordHeightBox", "StreamWidthBox", "StreamHeightBox" })
+                ((TextBox)window.FindName(name)).Text = "160";
+            foreach (var name in new[] { "RecordFpsBox", "StreamFpsBox" }) ((TextBox)window.FindName(name)).Text = "20";
+            foreach (var name in new[] { "RecordBitrateBox", "StreamBitrateBox" }) ((TextBox)window.FindName(name)).Text = "500";
+            ((TextBox)window.FindName("StreamDestinationBox")).Text = "rtmp://127.0.0.1/live/test";
+            KeyboardCall(window, "UpdateStartButtons");
+            Capture("record-idle");
             var start = Start(MediaOutputKind.Rtmp);
             WaitReviewTask(start);
             InteractionAssert(start.Result.Success && vm.CanStartRecording && !vm.CanStartStreaming,
@@ -54,6 +71,9 @@ internal static partial class Program
             KeyboardCall(window, "UpdateStartButtons");
             InteractionAssert(((Button)window.FindName("StartRecordingButton")).IsEnabled,
                 "The recording button remained disabled while streaming.");
+            InteractionAssert(streamButton.IsEnabled && Equals(streamButton.Content, window.FindResource("StopStreamingOnly")),
+                "The live stream action must change to its enabled stop action.");
+            var recordBounds = recordButton.TransformToAncestor(window).TransformBounds(new Rect(recordButton.RenderSize));
             start = Start(MediaOutputKind.Recording);
             WaitReviewTask(start);
             InteractionAssert(start.Result.Success && vm.IsRecordingMediaOutput &&
@@ -63,10 +83,39 @@ internal static partial class Program
             InteractionAssert(vm.MediaOutputStatus == Localization.LocalizationService.Get("MediaOutputRecordingAndStreaming"),
                 "A stale stopped event hid the active parallel outputs.");
             InteractionAssert(!vm.CanUseVirtualCamera, "Virtual camera must remain exclusive.");
-            WaitReviewTask(vm.StopRecordingAsync());
+            window.UpdateLayout();
+            InteractionAssert(recordButton.IsEnabled && Equals(recordButton.Content, window.FindResource("StopRecordingOnly")) &&
+                recordBounds == recordButton.TransformToAncestor(window).TransformBounds(new Rect(recordButton.RenderSize)),
+                "Recording must switch to stop on the same button without moving it.");
+            Capture("record-running");
+            // A stop action must bypass any invalid edits to future start settings.
+            ((TextBox)window.FindName("RecordWidthBox")).Text = "invalid";
+            recordButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            AdvanceDispatcher(TimeSpan.FromMilliseconds(80));
             InteractionAssert(vm.IsMediaOutputRunning && !vm.IsRecordingMediaOutput &&
                 vm.CanStopStreaming && !vm.CanStopRecording && vm.CanStartRecording,
                 "Stopping recording stopped or hid the remaining stream.");
+            InteractionAssert(Equals(recordButton.Content, window.FindResource("StartRecording")), "Recording button did not reset after stop.");
+            ((TextBox)window.FindName("RecordWidthBox")).Text = "160";
+            recordButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            AdvanceDispatcher(TimeSpan.FromMilliseconds(80));
+            InteractionAssert(vm.IsRecordingMediaOutput, "The same recording action could not start a new run.");
+            tabs.SelectedIndex = 1; window.UpdateLayout();
+            var streamBounds = streamButton.TransformToAncestor(window).TransformBounds(new Rect(streamButton.RenderSize));
+            Capture("stream-running");
+            ((TextBox)window.FindName("StreamWidthBox")).Text = "invalid";
+            streamButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            AdvanceDispatcher(TimeSpan.FromMilliseconds(80));
+            InteractionAssert(!vm.IsStreamingMediaOutput && vm.IsRecordingMediaOutput &&
+                Equals(streamButton.Content, window.FindResource("StartStreaming")), "Stopping the stream through its own button affected recording.");
+            ((TextBox)window.FindName("StreamWidthBox")).Text = "160";
+            streamButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            AdvanceDispatcher(TimeSpan.FromMilliseconds(80));
+            window.UpdateLayout();
+            InteractionAssert(vm.IsStreamingMediaOutput && Equals(streamButton.Content, window.FindResource("StopStreamingOnly")) &&
+                streamBounds == streamButton.TransformToAncestor(window).TransformBounds(new Rect(streamButton.RenderSize)),
+                "Streaming did not restart with the same in-place action.");
+            WaitReviewTask(vm.StopRecordingAsync());
             // Remaining checks use the VM. Unsubscribe window save prompts
             // before FindLatest can observe unrelated user pending files.
             window.Close();
@@ -92,6 +141,40 @@ internal static partial class Program
                 "Stopping streaming stopped recording.");
             WaitReviewTask(vm.StopMediaOutputAsync());
             InteractionAssert(!vm.IsMediaOutputRunning, "Stop-all left an output running.");
+            // Exercise the actual camera pump with inert native callbacks. No
+            // registration, camera hardware or real frame source is required.
+            var originalCamera = (VirtualCameraService)KeyboardField(vm, "_virtualCamera");
+            var camera = new VirtualCameraService((_, _, _) => null, (_, _, _) => 0, _ => 0, () => 0);
+            try
+            {
+                SetKeyboardField(vm, "_virtualCamera", camera);
+                SetKeyboardField(vm, "_virtualCameraCapabilities", new VirtualCameraCapabilities(true, true, true, false, false, ""));
+                var cameraWindow = new MediaOutputSettingsWindow(vm) { ShowInTaskbar = false, ShowActivated = false };
+                cameraWindow.Loaded -= (RoutedEventHandler)Delegate.CreateDelegate(typeof(RoutedEventHandler), cameraWindow,
+                    cameraWindow.GetType().GetMethod("OnLoaded", KeyboardTestMembers | System.Reflection.BindingFlags.DeclaredOnly)!);
+                try
+                {
+                    cameraWindow.Show();
+                    Visuals(cameraWindow).OfType<TabControl>().First().SelectedIndex = 2;
+                    WaitReviewTask(camera.StartAsync(811, 160, 160, 20, CancellationToken.None));
+                    KeyboardCall(vm, "NotifyMediaOutputStateChanged");
+                    AdvanceDispatcher(TimeSpan.FromMilliseconds(80)); cameraWindow.UpdateLayout();
+                    var action = (Button)cameraWindow.FindName("StartVirtualCameraButton");
+                    InteractionAssert(action.IsVisible && action.IsEnabled && Equals(action.Content, cameraWindow.FindResource("StopVirtualCamera")),
+                        "A running virtual camera did not expose its stop action in the camera tab.");
+                    if (output is not null) SaveWindowRender(cameraWindow, Path.Combine(output, "camera-running.png"));
+                    action.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    AdvanceDispatcher(TimeSpan.FromMilliseconds(150));
+                    InteractionAssert(!camera.IsRunning && Equals(action.Content, cameraWindow.FindResource("StartVirtualCamera")),
+                        "The virtual camera did not stop from its own action.");
+                }
+                finally { cameraWindow.Close(); }
+            }
+            finally
+            {
+                WaitReviewTask(camera.DisposeAsync().AsTask());
+                SetKeyboardField(vm, "_virtualCamera", originalCamera);
+            }
             Console.WriteLine("Parallel output VM/UI passed: buttons, independent stops, source identity, exclusive virtual camera and source isolation.");
         }
         finally

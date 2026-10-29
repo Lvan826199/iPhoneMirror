@@ -15,6 +15,25 @@ if (args is ["--operation-path-probe"])
 }
 
 var failures = new List<string>();
+Run("Apple MSI retries only unavailable verbose logging and preserves cancellation", () =>
+{
+    foreach (var firstExit in new[] { 0, 1622, 1603, 1619, 1223, 3010 })
+    {
+        var calls = new List<IReadOnlyList<string>>();
+        var warnings = 0;
+        var result = AppleSupportInstaller.RunMsiWithLogFallbackAsync(@"C:\packages\Apple.msi",
+            @"C:\logs\apple.log", arguments =>
+            {
+                calls.Add(arguments);
+                return Task.FromResult(new ProcessResult(calls.Count == 1 ? firstExit : 3010, "", ""));
+            }, () => warnings++).GetAwaiter().GetResult();
+        Equal(firstExit == 1622 ? 2 : 1, calls.Count);
+        Equal(firstExit == 1622 ? 1 : 0, warnings);
+        Equal(firstExit == 1622 ? 3010 : firstExit, result.ExitCode);
+        True(calls.All(arguments => arguments.Take(4).SequenceEqual(new[] { "/i", @"C:\packages\Apple.msi", "/quiet", "/norestart" })));
+        if (calls.Count == 2) True(!calls[1].Contains("/l*v"));
+    }
+});
 Run("isolated driver host keeps result logs and rollback backups in the machine data directory", () =>
 {
     var paths = DriverConstants.GetOperationPaths("0123456789abcdef0123456789abcdef");

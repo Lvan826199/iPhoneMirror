@@ -15,6 +15,7 @@ namespace IPhoneMirror.App.Runtime.Tests;
 
 internal static partial class Program
 {
+    private static bool ReviewCapture => Environment.GetEnvironmentVariable("IPHONE_MIRROR_UI_REVIEW_CAPTURE") == "1";
     // Exercises real WPF windows through the app's read-only preview catalog.
     // Does not enumerate devices, send input, install drivers or download updates.
     private static int RunConsistencyAudit(string output, string? onlySurface = null, string? onlyCulture = null)
@@ -39,7 +40,7 @@ internal static partial class Program
         try
         {
             foreach (var culture in (onlyCulture is not null ? new[] { onlyCulture } :
-                         QuickLayoutAudit ? new[] { "en-US" } : new[] { "zh-CN", "en-US", "zh-HK", "zh-TW" }))
+                         QuickLayoutAudit ? new[] { "en-US" } : IPhoneMirror.UI.Services.SupportedUiCultures.All))
             foreach (var theme in (QuickLayoutAudit ? new[] { AppTheme.Light } : new[] { AppTheme.Light, AppTheme.Dark }))
             {
                 language.Invoke(null, [culture, false, false]);
@@ -47,14 +48,22 @@ internal static partial class Program
                 if (Environment.GetEnvironmentVariable("IPHONE_MIRROR_UI_AUDIT_HIGH_CONTRAST") == "1")
                     Wpf.Ui.Appearance.ApplicationThemeManager.Apply(Wpf.Ui.Appearance.ApplicationTheme.HighContrast,
                         Wpf.Ui.Controls.WindowBackdropType.None, updateAccent: false);
+                double? auditScale = null;
                 if (Environment.GetEnvironmentVariable("IPHONE_MIRROR_UI_AUDIT_TEXT_SCALE") is { } scaleText &&
                     double.TryParse(scaleText, System.Globalization.NumberStyles.Float,
                         System.Globalization.CultureInfo.InvariantCulture, out var textScale))
+                    auditScale = textScale;
+                void ApplyAuditAppearance()
+                {
+                    if (auditScale is null && Environment.GetEnvironmentVariable("IPHONE_MIRROR_UI_AUDIT_HIGH_CONTRAST") != "1") return;
                     assembly.GetType("IPhoneMirror.UI.Services.AccessibilityAppearance")!
                         .GetMethod("Apply", BindingFlags.Static | BindingFlags.NonPublic)!
-                        .Invoke(null, [app, (double?)textScale,
+                        .Invoke(null, [app, auditScale,
                             (bool?)(Environment.GetEnvironmentVariable("IPHONE_MIRROR_UI_AUDIT_HIGH_CONTRAST") == "1")]);
+                }
+                ApplyAuditAppearance();
                 var owner = CreateWorkspaceTestWindow(app, includeNativePreview: false);
+                ApplyAuditAppearance();
                 owner.ShowInTaskbar = false;
                 try
                 {
@@ -114,6 +123,7 @@ internal static partial class Program
                                     .Invoke(null, [owner, surface == "bluetooth-waiting" ? "Test iPhone" : string.Join(" ", Enumerable.Repeat("Connection failed. Check pairing and try again.", 30))]);
                             }
                             else open.Invoke(owner, [surface]);
+                            ApplyAuditAppearance();
                             AdvanceDispatcher(TimeSpan.FromMilliseconds(240));
                             var windows = app.Windows.Cast<Window>().Where(w => w != owner && w.IsVisible).ToArray();
                             if (!surface.StartsWith("workspace-") && windows.Length == 0)
@@ -123,7 +133,7 @@ internal static partial class Program
                                 window.UpdateLayout();
                                 if (window != owner) AssertSelfDrawnWindowCorners(window);
                                 // Tab contents and combo popups are separate template/resource paths.
-                                ExerciseTabsAndPopups(window);
+                                ExerciseTabsAndPopups(window, layoutFindings);
                                 AssertVisibleButtonsFit(window);
                                 var name = $"{culture}-{theme}-{surface}";
                                 SaveWindowRender(window, Path.Combine(output, name + ".png"));
@@ -132,7 +142,8 @@ internal static partial class Program
                                 if (surface is "reverse-control-prompt" or "reverse-control-prompt-long")
                                     AssertPromptActionsReachable(window, Path.Combine(output, name + "-scrolled.png"));
                                 ExerciseWorkAreaSizes(window, name, layoutFindings, Path.Combine(output, name));
-                                results.Add(new { culture, theme = theme.ToString(), surface,
+                                results.Add(new { culture, theme = theme.ToString(), textScale = auditScale,
+                                    actualBodyFontSize = (double)app.FindResource("BodyFontSize"), surface,
                                     window = window.GetType().Name, width = window.ActualWidth, height = window.ActualHeight });
                                 if (window != owner) AssertEscapeCloses(window);
                             }
@@ -189,6 +200,7 @@ internal static partial class Program
                 budgets.Add(("minimum", minWidth > 0 ? Math.Min(width, minWidth) : width, minHeight > 0 ? Math.Min(height, minHeight) : height));
             foreach (var scale in new[] { 1.0, 1.25, 1.5, 1.75, 2.0 })
             {
+                if (ReviewCapture && scale != 2) continue;
                 // Match WindowWorkAreaController's 80% high-DPI work-area cap.
                 var ratio = scale > 1 ? 0.8 : 1;
                 budgets.Add(($"{scale:P0}", Math.Min(width, 1920 * ratio / scale), Math.Min(height, 1040 * ratio / scale)));
@@ -222,7 +234,8 @@ internal static partial class Program
         DependencyObject? parent = microphone;
         while ((parent = VisualTreeHelper.GetParent(parent)) is not null && parent is not ScrollViewer) { }
         var scroll = parent as ScrollViewer ?? throw new InvalidOperationException("Microphone scroll area was not found.");
-        scroll.ScrollToEnd();
+        microphone.BringIntoView();
+        AdvanceDispatcher(TimeSpan.FromMilliseconds(100));
         window.UpdateLayout();
         var bounds = microphone.TransformToAncestor(scroll).TransformBounds(new Rect(microphone.RenderSize));
         if (bounds.Top < -2 || bounds.Bottom > scroll.ActualHeight + 2 || bounds.Right > scroll.ActualWidth + 2)
@@ -266,7 +279,7 @@ internal static partial class Program
             foreach (var child in Visuals(VisualTreeHelper.GetChild(root, i))) yield return child;
     }
 
-    private static void ExerciseTabsAndPopups(Window window)
+    private static void ExerciseTabsAndPopups(Window window, HashSet<string>? scrollbarFindings = null)
     {
         foreach (var tabs in Visuals(window).OfType<TabControl>().ToArray())
         {
@@ -286,6 +299,9 @@ internal static partial class Program
         {
             combo.IsDropDownOpen = true;
             window.UpdateLayout();
+            if (scrollbarFindings is not null &&
+                (combo.Template.FindName("PART_Popup", combo) ?? combo.Template.FindName("Popup", combo)) is Popup { Child: { } child })
+                AuditScrollBarLayout(child, window.GetType().Name + "/combo-popup", scrollbarFindings);
             combo.IsDropDownOpen = false;
         }
         foreach (var element in Visuals(window).OfType<FrameworkElement>().Where(e => e.ContextMenu != null).ToArray())
@@ -324,6 +340,28 @@ internal static partial class Program
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
         using var stream = File.Create(path);
         encoder.Save(stream);
+        if (ReviewCapture)
+            File.WriteAllText(Path.ChangeExtension(path, ".capture.json"), JsonSerializer.Serialize(new
+            {
+                window = window.GetType().Name, windowType = window.GetType().FullName,
+                assembly = window.GetType().Assembly.GetName().Name,
+                title = window.Title, width = window.ActualWidth,
+                height = window.ActualHeight, rendering = "Shown WPF window exported with RenderTargetBitmap; not a desktop screen capture.",
+                bodyFontSize = window.TryFindResource("BodyFontSize") as double?,
+                scrollAreas = Visuals(window).OfType<ScrollViewer>().Where(viewer => viewer.IsVisible).Select(viewer => new
+                {
+                    name = viewer.Name, type = viewer.GetType().Name, viewer.ViewportWidth, viewer.ViewportHeight,
+                    viewer.ExtentWidth, viewer.ExtentHeight, viewer.HorizontalOffset, viewer.VerticalOffset,
+                    vertical = viewer.ComputedVerticalScrollBarVisibility.ToString(),
+                    horizontal = viewer.ComputedHorizontalScrollBarVisibility.ToString(),
+                }).ToArray(),
+                fonts = Visuals(window).OfType<TextBlock>().Where(text => text.IsVisible && !string.IsNullOrWhiteSpace(text.Text) &&
+                    !text.FontFamily.Source.Contains("Fluent", StringComparison.OrdinalIgnoreCase) &&
+                    !text.FontFamily.Source.Contains("MDL2", StringComparison.OrdinalIgnoreCase))
+                    .Select(text => new { text = text.Text, text.FontSize, family = text.FontFamily.Source,
+                        lineHeight = double.IsNaN(text.LineHeight) ? (double?)null : text.LineHeight,
+                        weight = text.FontWeight.ToString() }).ToArray(),
+            }, new JsonSerializerOptions { WriteIndented = true }));
     }
 
     private sealed class AuditTraceListener : TraceListener

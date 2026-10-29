@@ -8,7 +8,7 @@ namespace IPhoneMirror.App.Runtime.Tests;
 
 internal static partial class Program
 {
-    private static int RunDriverConsistencyAudit(string sourceRoot, string assemblyPath, string output)
+    private static int RunDriverConsistencyAudit(string sourceRoot, string assemblyPath, string output, string? onlyCulture = null)
     {
         // Keep batch UI verification independent of display-driver teardown.
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
@@ -29,14 +29,25 @@ internal static partial class Program
         System.Diagnostics.PresentationTraceSources.DataBindingSource.Switch.Level = System.Diagnostics.SourceLevels.Warning;
         var themeService = assembly.GetType("IPhoneMirror.DriverInstaller.Services.DriverThemeService")!;
         var themeMode = assembly.GetType("IPhoneMirror.DriverInstaller.Services.DriverThemeMode")!;
+        var localizationService = assembly.GetType("IPhoneMirror.DriverInstaller.Services.DriverLocalization")!;
+        var initialize = localizationService.GetMethod("Initialize", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var appearance = assembly.GetType("IPhoneMirror.UI.Services.AccessibilityAppearance")!
+            .GetMethod("Apply", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var combinations = new List<object>();
         ResourceDictionary? localization = null;
-        foreach (var culture in (QuickLayoutAudit ? new[] { "en-US" } : new[] { "zh-CN", "en-US", "zh-HK", "zh-TW" }))
+        foreach (var culture in (onlyCulture is not null ? new[] { onlyCulture } : QuickLayoutAudit ? new[] { "en-US" } : IPhoneMirror.UI.Services.SupportedUiCultures.All))
         foreach (var theme in (QuickLayoutAudit ? new[] { "Light" } : new[] { "Light", "Dark" }))
+        foreach (var textScale in (QuickLayoutAudit ? new[] { 1d } : new[] { 1d, 2d }))
         {
+            initialize.Invoke(null, [new[] { "--language", culture }]);
             if (localization != null) app.Resources.MergedDictionaries.Remove(localization);
             localization = new ResourceDictionary { Source = new Uri($"/{assembly.GetName().Name};component/Localization/Strings.{culture}.xaml", UriKind.Relative) };
             app.Resources.MergedDictionaries.Insert(0, localization);
             themeService.GetMethod("Apply", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, [Enum.Parse(themeMode, theme), false]);
+            appearance.Invoke(null, [app, (double?)textScale, (bool?)false]);
+            if (app.FindResource("AppFontFamily") is not System.Windows.Media.FontFamily font ||
+                !font.Source.Contains(culture == "ja-JP" ? "Yu Gothic UI" : "Microsoft YaHei UI"))
+                throw new InvalidOperationException("Driver font fallback disagrees with the selected language: " + culture);
             Window Construct(string name, params object?[] arguments) => (Window)Activator.CreateInstance(
                 assembly.GetType("IPhoneMirror.DriverInstaller." + name)!, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
                 null, arguments, null)!;
@@ -60,17 +71,26 @@ internal static partial class Program
                 if (Math.Abs(owner.Opacity - 0.63) > 0.001)
                     throw new InvalidOperationException($"Driver theme transition overwrote window opacity: {owner.Opacity}, base={owner.GetAnimationBaseValue(UIElement.OpacityProperty)}; assembly={assembly.Location}.");
                 owner.Opacity = 1;
+                // Applying the theme above restores the real Windows text scale.
+                // Reapply the simulated scale only after that transition finishes.
+                appearance.Invoke(null, [app, (double?)textScale, (bool?)false]);
+                owner.UpdateLayout();
+                var actualTitle = Visuals(owner).OfType<System.Windows.Controls.TextBlock>()
+                    .Single(block => block.Text == (string)app.FindResource("AppTitle"));
+                if (Math.Abs(actualTitle.FontSize - (textScale == 1 ? 22 : 38)) > 0.001)
+                    throw new InvalidOperationException($"Driver actual title size disagrees with its matrix label: {culture}/{textScale}: {actualTitle.FontSize}.");
                 const string diagnostic = "Win32=5; USB\\VID_05AC; access denied while reading device properties.";
                 const string logPath = @"C:\Users\Preview\AppData\Local\iPhoneMirror\Logs\driver-operation-20261001.log";
                 foreach (var advanced in new[] { false, true })
                 {
                     owner.GetType().GetProperty("IsAdvancedMode")!.SetValue(owner, advanced);
                     owner.UpdateLayout();
-                    var name = $"{culture}-{theme}-driver-{(advanced ? "advanced" : "simple")}";
-                    ExerciseTabsAndPopups(owner);
+                    var name = $"{culture}-{theme}-{textScale}-driver-{(advanced ? "advanced" : "simple")}";
+                    ExerciseTabsAndPopups(owner, findings);
                     SaveWindowRender(owner, Path.Combine(output, name + ".png"));
                     ExerciseWorkAreaSizes(owner, name, findings, Path.Combine(output, name));
                     count++;
+                    combinations.Add(new { culture, theme, textScale, actualTitleSize = actualTitle.FontSize, surface = name });
                     // Render the actual new status messages in both layouts without
                     // starting an elevated operation, cancelling one, or touching PnP.
                     var originalStatus = owner.GetType().GetProperty("OperationStatus")!.GetValue(owner);
@@ -93,6 +113,7 @@ internal static partial class Program
                         SaveWindowRender(owner, Path.Combine(output, statusName + ".png"));
                         ExerciseWorkAreaSizes(owner, statusName, findings, Path.Combine(output, statusName));
                         count++;
+                        combinations.Add(new { culture, theme, textScale, surface = statusName });
                     }
                     owner.GetType().GetProperty("IsBusy")!.SetValue(owner, false);
                     owner.GetType().GetProperty("OperationStatus")!.SetValue(owner, originalStatus);
@@ -143,12 +164,13 @@ internal static partial class Program
                                     ((System.Windows.Media.SolidColorBrush)app.FindResource("AccentBrush")).Color)
                                     throw new InvalidOperationException("Parent driver selection must use the application accent.");
                             }
-                            var key = $"{culture}-{theme}-{name}";
+                            var key = $"{culture}-{theme}-{textScale}-{name}";
                             AssertVisibleButtonsFit(window);
                             SaveWindowRender(window, Path.Combine(output, key + ".png"));
                             ExerciseWorkAreaSizes(window, key, findings, Path.Combine(output, key));
                             AssertEscapeCloses(window);
                             count++;
+                            combinations.Add(new { culture, theme, textScale, surface = name });
                         }
                         catch (Exception error) { failures.Add($"{culture}/{theme}/{name}: {error.GetBaseException().Message}"); }
                         finally { if (window.IsVisible) window.Close(); }
@@ -164,7 +186,7 @@ internal static partial class Program
         }
         System.Diagnostics.PresentationTraceSources.DataBindingSource.Listeners.Remove(bindingTrace);
         themeService.GetMethod("Shutdown", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, null);
-        File.WriteAllText(Path.Combine(output, "driver-results.json"), JsonSerializer.Serialize(new { count, failures, findings, bindingErrors = bindingTrace.Messages }, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(Path.Combine(output, "driver-results.json"), JsonSerializer.Serialize(new { count, combinations, failures, findings, bindingErrors = bindingTrace.Messages }, new JsonSerializerOptions { WriteIndented = true }));
         foreach (var failure in failures.Concat(findings)) Console.Error.WriteLine(failure);
         Console.WriteLine($"Driver UI audit: {count} renders, {failures.Count} failures, {findings.Count} layout findings, {bindingTrace.Messages.Count} binding diagnostics.");
         app.Shutdown();

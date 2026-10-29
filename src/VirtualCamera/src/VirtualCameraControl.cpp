@@ -175,9 +175,7 @@ std::int32_t IM_VCAM_CALL im_vcam_start_ex(
     const wchar_t* friendly_name, std::uint32_t width,
     std::uint32_t height, std::uint32_t frame_rate) {
     using namespace iPhoneMirror::virtual_camera;
-    if (width < 160 || width > MaximumFrameWidth ||
-        height < 160 || height > MaximumFrameHeight ||
-        (width & 1U) != 0 || (height & 1U) != 0 ||
+    if (!valid_output_size(width, height) ||
         frame_rate < 10 || frame_rate > 60)
         return E_INVALIDARG;
     std::lock_guard lock(control_mutex);
@@ -199,7 +197,7 @@ std::int32_t IM_VCAM_CALL im_vcam_start_ex(
         set_message(L"The virtual camera media source is not installed.");
         return REGDB_E_CLASSNOTREG;
     }
-    if (FAILED(hr = publisher.open_for_current_user())) {
+    if (FAILED(hr = publisher.open_for_current_user(frame_rate, width, height))) {
         set_message(L"Could not create the cross-process frame buffer.");
         return hr;
     }

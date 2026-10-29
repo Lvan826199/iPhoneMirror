@@ -93,7 +93,8 @@ public partial class FirstRunSetupWindow
         var row = new WrapPanel { Margin = new(0, 4, -12, 0) };
         row.SizeChanged += (_, _) =>
         {
-            var columns = row.ActualWidth >= 570 ? (row.Children.Count == 4 ? 2 : Math.Min(3, Math.Max(1, row.Children.Count))) : row.ActualWidth >= 340 ? 2 : 1;
+            var scale = row.TryFindResource("BodyFontSize") is double size ? 1 + .5 * (size / 14 - 1) : 1;
+            var columns = row.ActualWidth >= 570 * scale ? (row.Children.Count == 4 ? 2 : Math.Min(3, Math.Max(1, row.Children.Count))) : row.ActualWidth >= 340 * scale ? 2 : 1;
             row.ItemWidth = Math.Max(120, row.ActualWidth / columns);
         };
         return row;
@@ -112,16 +113,19 @@ public partial class FirstRunSetupWindow
     private RadioButton ValueCard(string group, string title, string? description, bool selected)
     {
         var panel = new StackPanel();
-        panel.Children.Add(new TextBlock { Text = title, FontSize = 15, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new(0, 0, 0, description is null ? 0 : 10) });
+        var titleText = new TextBlock { Text = title, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new(0, 0, 0, description is null ? 0 : 10) };
+        titleText.SetResourceReference(TextBlock.FontSizeProperty, "FontSize15"); panel.Children.Add(titleText);
         if (description is not null)
         {
-            var detail = new TextBlock { Text = description, FontSize = 13, TextWrapping = TextWrapping.Wrap, LineHeight = 20 };
+            var detail = new TextBlock { Text = description, TextWrapping = TextWrapping.Wrap };
+            detail.SetResourceReference(TextBlock.FontSizeProperty, "BodyFontSize");
+            detail.SetResourceReference(TextBlock.LineHeightProperty, "BodyLineHeight");
             detail.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush"); panel.Children.Add(detail);
         }
         var glyph = group switch { "language" => "language", "theme" => "sun", "usage" => "phone", "fps" => "bolt", "decoder" => "settings", "backend" => "wireless", "display" => "spark", _ => "image" };
         var card = new RadioButton { GroupName = group, Content = panel, IsChecked = selected, Tag = Symbol(glyph),
             MinHeight = description is null ? 112 : 192, RenderTransformOrigin = new(.5, .5) };
-        if (group == "language") card.Height = 120;
+        if (group == "language") card.MinHeight = 120;
         card.SetResourceReference(StyleProperty, "SetupChoiceCard");
         System.Windows.Automation.AutomationProperties.SetName(card, title);
         AnimateCard(card);
@@ -220,6 +224,7 @@ public partial class FirstRunSetupWindow
         System.Windows.Automation.AutomationProperties.SetName(previous, L("WizardPrevious"));
         System.Windows.Automation.AutomationProperties.SetName(next, L("WizardNext"));
         var label = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
+        label.SetResourceReference(FontSizeProperty, "SecondaryFontSize");
         navigation.Children.Add(previous); navigation.Children.Add(label); navigation.Children.Add(next);
         if (pageCount > 1) host.Children.Add(navigation);
         void Show()
@@ -237,8 +242,12 @@ public partial class FirstRunSetupWindow
 
     private void DeviceInventory()
     {
-        var items = _state.Devices.Select((device, index) => (UIElement)new TextBlock
-        { Text = $"{index + 1:00}   {device.Name}", FontSize = 17, Margin = new(12, 12, 12, 12), TextWrapping = TextWrapping.Wrap }).ToArray();
+        var items = _state.Devices.Select((device, index) =>
+        {
+            var text = new TextBlock { Text = $"{index + 1:00}   {device.Name}", Margin = new(12, 12, 12, 12), TextWrapping = TextWrapping.Wrap };
+            text.SetResourceReference(TextBlock.FontSizeProperty, "FontSize18");
+            return (UIElement)text;
+        }).ToArray();
         Body.Children.Add(Paginate(items, 4, cards: false));
         Action("SetupScanAgain", () => { StopDiscovery(); StartDiscovery(); return Task.CompletedTask; });
     }
@@ -249,7 +258,8 @@ public partial class FirstRunSetupWindow
         var items = devices.Select(device =>
         {
             var panel = new StackPanel();
-            panel.Children.Add(new TextBlock { Text = device.Name, FontSize = 18, FontWeight = FontWeights.SemiBold, Margin = new(0, 0, 0, 16), TextWrapping = TextWrapping.Wrap });
+            var deviceName = new TextBlock { Text = device.Name, FontWeight = FontWeights.SemiBold, Margin = new(0, 0, 0, 16), TextWrapping = TextWrapping.Wrap };
+            deviceName.SetResourceReference(FontSizeProperty, "FontSize18"); panel.Children.Add(deviceName);
             foreach (var pair in device.Outcomes.Where(p => p.Key is SetupStep.Profile or SetupStep.Wireless or SetupStep.Bluetooth))
                 panel.Children.Add(new TextBlock { Text = (pair.Value == SetupOutcome.Verified ? "✓ " : "— ") + L("SetupTitle" + pair.Key) +
                     (pair.Value == SetupOutcome.Skipped ? " · " + L("SetupSkipped") : ""), TextWrapping = TextWrapping.Wrap, Margin = new(0, 4, 0, 4) });

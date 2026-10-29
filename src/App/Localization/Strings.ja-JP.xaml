@@ -732,6 +732,7 @@
     <system:String x:Key="VirtualCameraDescription">選択したミラーリングを、会議や録画のアプリで選べるカメラデバイスとして公開します。</system:String>
     <system:String x:Key="VirtualCameraBackendMissing">互換性のあるWindowsの仮想カメラのメディアソースがインストールされていません。存在しないカメラを報告しないよう、このボタンは無効のままです。</system:String>
     <system:String x:Key="StartVirtualCamera">仮想カメラを開始</system:String>
+    <system:String x:Key="StopVirtualCamera">仮想カメラを停止</system:String>
     <system:String x:Key="StopMediaOutput">出力を停止</system:String>
     <system:String x:Key="RecordSaveTitle">ミラーリングの録画を保存</system:String>
     <system:String x:Key="RecordMp4Filter">MP4動画 (*.mp4)|*.mp4</system:String>
@@ -1635,4 +1636,13 @@ BluetoothとAssistiveTouchが必要です。
     <system:String x:Key="StopRecordingOnly">録画を停止</system:String>
     <system:String x:Key="StopStreamingOnly">ライブ配信を停止</system:String>
     <system:String x:Key="MediaOutputRecordingAndStreaming">録画と配信</system:String>
+    <system:String x:Key="DeviceBindingOperationFailed">デバイス操作を完了できませんでした。再試行し、問題が続く場合は診断ログを確認してください。</system:String>
+    <system:String x:Key="DeviceBindingRefreshFailed">デバイスプロファイルを更新できませんでした。再試行し、問題が続く場合は診断ログを確認してください。</system:String>
+    <system:String x:Key="MediaOutputOperationFailed">メディア出力操作を完了できませんでした。再試行し、問題が続く場合は診断ログを確認してください。</system:String>
+    <system:String x:Key="TrayStartFailed">トレイからミラーリングを開始できませんでした。デバイスを確認して再試行してください。</system:String>
+    <system:String x:Key="TrayRefreshFailed">トレイからデバイスを更新できませんでした。再試行してください。</system:String>
+    <system:String x:Key="RecordingSaveRetry">録画ファイルは引き続き保存できます。もう一度保存を選び、書き込み可能なフォルダーを指定してください。</system:String>
+    <system:String x:Key="MicrophoneRefreshFailed">マイク一覧を更新できませんでした。マイクの接続とアクセス権限を確認して、もう一度お試しください。</system:String>
+    <system:String x:Key="WirelessOriginalStartupFailed">ワイヤレス受信機が起動直後に終了しました。ワイヤレス設定を再適用して再試行してください。</system:String>
+    <system:String x:Key="DlnaRecovering">AirPlay は利用可能です。DLNA の起動に失敗したため、自動的に再試行しています。</system:String>
 </ResourceDictionary>

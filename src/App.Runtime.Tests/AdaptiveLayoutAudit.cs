@@ -11,6 +11,16 @@ internal static partial class Program
 
     private static void AuditAdaptiveLayout(Window window, string name, HashSet<string> findings)
     {
+        AuditScrollBarLayout(window, name, findings);
+        if (window is IPhoneMirror.App.Windows.UpdateWindow &&
+            window.FindName("VersionBadge") is FrameworkElement versionBadge)
+        {
+            var close = Visuals(window).OfType<Button>().Single(IPhoneMirror.UI.Controls.RoundedWindow.GetIsChromeCloseButton);
+            var badgeBounds = versionBadge.TransformToAncestor(window).TransformBounds(new Rect(versionBadge.RenderSize));
+            var closeBounds = close.TransformToAncestor(window).TransformBounds(new Rect(close.RenderSize));
+            if (badgeBounds.IntersectsWith(closeBounds))
+                findings.Add($"{name}: version badge overlaps the fixed close action.");
+        }
         foreach (var element in Visuals(window).OfType<FrameworkElement>().Where(e => e.IsVisible).ToArray())
         {
             if (element is not TextBlock && element is not Button && element is not TextBox && element is not ComboBox && element is not ScrollViewer) continue;
@@ -29,6 +39,8 @@ internal static partial class Program
             if (element is TextBlock && string.IsNullOrWhiteSpace(text)) continue;
             // Icon fonts are deliberately sized to icon boxes and have different ink metrics.
             if (element is TextBlock icon && (icon.FontFamily.Source.Contains("Fluent") || icon.FontFamily.Source.Contains("MDL2"))) continue;
+            if (element is TextBlock readingText && text?.Length > 1 && readingText.FontSize < 12)
+                findings.Add($"{name}: reading text is too small ({readingText.FontSize:0.0} DIP): {text}");
             var label = $"{element.GetType().Name} {element.Name} '{text?.Replace("\n", " ")[..Math.Min(text?.Length ?? 0, 80)]}'";
             var trims = element is TextBlock { TextTrimming: not TextTrimming.None };
             if (element is TextBlock source && source.ActualWidth > 0 && source.ActualHeight > 0)

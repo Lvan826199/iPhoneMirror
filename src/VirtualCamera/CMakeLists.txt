@@ -30,6 +30,8 @@ target_link_libraries(iPhoneMirror.VirtualCamera PRIVATE
     mfuuid
     ole32
     shell32
+    winmm
+    avrt
 )
 set_target_properties(iPhoneMirror.VirtualCamera PROPERTIES
     OUTPUT_NAME "iPhoneMirror.VirtualCamera"

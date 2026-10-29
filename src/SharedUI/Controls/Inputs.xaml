@@ -68,6 +68,8 @@
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="MaxDropDownHeight" Value="260"/>
             <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
         </Style>
 
         <Style TargetType="CheckBox">

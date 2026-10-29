@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <!-- This WPF tool uses Win32 APIs, not WinRT projections. Avoid implicitly
@@ -11,7 +11,7 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <AssemblyName>iPhoneMirror.Driver</AssemblyName>
     <RootNamespace>IPhoneMirror.DriverInstaller</RootNamespace>
-    <Version>1.8.5-pre3</Version>
+    <Version>1.8.5-pre4</Version>
     <AssemblyVersion>1.8.5.0</AssemblyVersion>
     <FileVersion>1.8.5.0</FileVersion>
     <Authors>RayrenSX</Authors>
@@ -28,7 +28,7 @@
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <PublishTrimmed>false</PublishTrimmed>
     <DebugType>embedded</DebugType>
-    <SatelliteResourceLanguages>en;zh-Hans;zh-Hant</SatelliteResourceLanguages>
+    <SatelliteResourceLanguages>en;zh-Hans;zh-Hant;ja</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
@@ -38,9 +38,11 @@
     <Compile Include="..\Shared\Security\ElevationPathLock.cs"
              Link="Security\ElevationPathLock.cs" />
     <Compile Include="..\SharedUI\Services\AccessibilityAppearance.cs" Link="Services\AccessibilityAppearance.cs" />
+    <Compile Include="..\SharedUI\Services\SupportedUiCultures.cs" Link="Services\SupportedUiCultures.cs" />
     <Compile Include="..\SharedUI\Services\WindowWorkAreaController.cs"
              Link="Services\WindowWorkAreaController.cs" />
     <Compile Include="..\SharedUI\Animations\SurfaceMotion.cs" Link="Animations\SurfaceMotion.cs" />
+    <Compile Include="..\SharedUI\Animations\ScrollBarMotion.cs" Link="Animations\ScrollBarMotion.cs" />
     <Compile Include="..\SharedUI\Animations\PageTransition.cs"
              Link="Animations\PageTransition.cs" />
     <Compile Include="..\SharedUI\Controls\ModernButton.cs"
@@ -56,6 +58,7 @@
     <Compile Include="..\SharedUI\Controls\DialogKeyboard.cs" Link="Controls\DialogKeyboard.cs" />
     <Compile Include="..\SharedUI\Controls\ComboBoxTextLayout.cs" Link="Controls\ComboBoxTextLayout.cs" />
     <Compile Include="..\SharedUI\Controls\DialogViewport.cs" Link="Controls\DialogViewport.cs" />
+    <Compile Include="..\SharedUI\Controls\ResponsiveFieldRow.cs" Link="Controls\ResponsiveFieldRow.cs" />
     <Compile Include="..\SharedUI\Controls\RoundedWindow.cs" Link="Controls\RoundedWindow.cs" />
     <Page Include="..\SharedUI\Themes\LightTheme.xaml"
           Link="Themes\LightTheme.xaml" />

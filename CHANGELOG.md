@@ -5,6 +5,17 @@ All notable changes to iPhoneMirror are documented here. The project follows
 
 ## [Unreleased]
 
+## [1.8.5-pre4] - 2026-10-29
+
+### 新增与修复
+
+- 改进五语界面的大字号布局、滚动条、固定关闭动作和辅助功能。
+- 优化原画虚拟摄像头 60 fps 输出、SDR 转换、USB 解码回读和帧队列。
+- 修复 USB 停止与恢复竞争、解码回退、无线宿主清理、DLNA 降级重试和 HLS 退出处理。
+- 保留发布失败的已完成录制，支持保存重试和重启恢复，避免覆盖未保存文件。
+- 改进首次设置、设备绑定和 Apple USB 支持安装重试。
+- 应用与驱动管理器版本统一为 1.8.5-pre4。完整中英文发布说明见 [v1.8.5-pre4](docs/releases/v1.8.5-pre4.md)。
+
 ### Added
 
 - Japanese (ja-JP) user interface for the app, driver manager, installer,

@@ -25,6 +25,7 @@ internal sealed class UsbTouchBridgeHost : IAsyncDisposable
     private string? _requestedUdid;
     private UsbTouchTransport _transport;
     private int _started;
+    private bool _cleanupPending;
     private long _lifecycleVersion;
     private Task? _stopTask;
     private CancellationTokenSource? _startCancellation;
@@ -59,9 +60,10 @@ internal sealed class UsbTouchBridgeHost : IAsyncDisposable
         CancellationTokenSource startup;
         lock (_gate)
         {
-            if (_started != 0 || _stopTask is { IsCompleted: false })
+            if (_started != 0 || _cleanupPending || _stopTask is { IsCompleted: false })
                 throw new InvalidOperationException(LocalizationService.Get("TouchBridgeAlreadyStarted"));
             _started = 1;
+            _cleanupPending = true;
             version = ++_lifecycleVersion;
             startup = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             _startCancellation = startup;
@@ -161,7 +163,8 @@ internal sealed class UsbTouchBridgeHost : IAsyncDisposable
         lock (_gate)
         {
             if (_stopTask is { IsCompleted: false }) return _stopTask;
-            if (_started == 0) return Task.CompletedTask;
+            if (_started == 0 && !_cleanupPending) return Task.CompletedTask;
+            _cleanupPending = true;
             _started = 0;
             _startCancellation?.Cancel();
             _stopTask = StopCoreAsync();
@@ -173,7 +176,11 @@ internal sealed class UsbTouchBridgeHost : IAsyncDisposable
     {
         _bridge.OnEvent -= OnBridgeEvent;
         await _bridge.StopAsync().ConfigureAwait(false);
-        State = ReverseControlState.Idle;
+        lock (_gate)
+        {
+            _cleanupPending = false;
+            State = ReverseControlState.Idle;
+        }
     }
 
     private void EnsureReady()

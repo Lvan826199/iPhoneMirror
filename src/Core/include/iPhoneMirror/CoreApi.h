@@ -289,6 +289,7 @@ IM_API std::int32_t IM_CALL im_refresh_wireless_devices(
 IM_API std::int32_t IM_CALL im_media_cast_receiver_start(
     const wchar_t* receiver_name, const wchar_t* host_path);
 IM_API void IM_CALL im_media_cast_receiver_stop();
+// ready: 0 = starting/unavailable, 1 = ready, 2 = AirPlay ready while DLNA retries.
 IM_API std::int32_t IM_CALL im_media_cast_receiver_get_status(
     std::int32_t* running, std::int32_t* ready);
 IM_API std::int32_t IM_CALL im_media_cast_get_request(

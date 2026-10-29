@@ -1794,7 +1794,7 @@ void CaptureSession::run(std::stop_token stop_token) noexcept {
                             format.width, format.height));
                     }
                     video_decoder = std::make_unique<media::MediaFoundationVideoDecoder>(
-                        active_decoder_preference);
+                        active_decoder_preference, true);
                     video_decoder->configure(format, 60, 1);
                     active_decoder_runtime_mode = decoder_runtime_mode(
                         video_decoder->decoder_acceleration());
@@ -1884,7 +1884,7 @@ void CaptureSession::run(std::stop_token stop_token) noexcept {
                             try {
                                 auto replacement =
                                     std::make_unique<media::MediaFoundationVideoDecoder>(
-                                        requested_preference);
+                                        requested_preference, true);
                                 replacement->configure(format, 60, 1);
                                 const bool applied = detail::trial_and_commit_decoder(
                                     decoder_switch_, requested, replacement,

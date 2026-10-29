@@ -732,6 +732,7 @@
     <system:String x:Key="VirtualCameraDescription">将当前投屏画面注册为会议和录制软件可选择的摄像头设备。</system:String>
     <system:String x:Key="VirtualCameraBackendMissing">未安装兼容的 Windows 虚拟摄像头媒体源。按钮将保持禁用，避免误报不存在的摄像头设备。</system:String>
     <system:String x:Key="StartVirtualCamera">启动虚拟摄像头</system:String>
+    <system:String x:Key="StopVirtualCamera">停止虚拟摄像头</system:String>
     <system:String x:Key="StopMediaOutput">停止输出</system:String>
     <system:String x:Key="RecordSaveTitle">保存投屏录制</system:String>
     <system:String x:Key="RecordMp4Filter">MP4 视频 (*.mp4)|*.mp4</system:String>
@@ -1635,4 +1636,13 @@
     <system:String x:Key="StopRecordingOnly">停止录制</system:String>
     <system:String x:Key="StopStreamingOnly">停止直播</system:String>
     <system:String x:Key="MediaOutputRecordingAndStreaming">正在录制和直播</system:String>
+    <system:String x:Key="DeviceBindingOperationFailed">设备操作未完成。请重试；如果问题持续，请查看诊断日志。</system:String>
+    <system:String x:Key="DeviceBindingRefreshFailed">无法刷新设备档案。请重试；如果问题持续，请查看诊断日志。</system:String>
+    <system:String x:Key="MediaOutputOperationFailed">媒体输出操作未完成。请重试；如果问题持续，请查看诊断日志。</system:String>
+    <system:String x:Key="TrayStartFailed">无法从托盘启动投屏。请检查设备后重试。</system:String>
+    <system:String x:Key="TrayRefreshFailed">无法从托盘刷新设备。请重试。</system:String>
+    <system:String x:Key="RecordingSaveRetry">录制文件仍可保存。请再次点击保存，并选择有写入权限的文件夹。</system:String>
+    <system:String x:Key="MicrophoneRefreshFailed">无法刷新麦克风列表。请检查麦克风连接和访问权限后重试。</system:String>
+    <system:String x:Key="WirelessOriginalStartupFailed">无线接收器启动后立即退出，请重新应用无线设置以重试。</system:String>
+    <system:String x:Key="DlnaRecovering">AirPlay 可用；DLNA 启动失败，正在自动重试。</system:String>
 </ResourceDictionary>

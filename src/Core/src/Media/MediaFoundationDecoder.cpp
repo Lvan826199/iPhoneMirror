@@ -1,4 +1,5 @@
 #include "Media/MediaFoundationDecoder.h"
+#include "Media/DecoderFallback.h"
 #include "Media/BundledH264Decoder.h"
 
 #include "../Logging.h"
@@ -18,6 +19,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -1068,7 +1070,10 @@ struct MediaFoundationVideoDecoder::Impl {
     std::array<SharedTextureSlot, 16> shared_texture_slots;
     std::chrono::steady_clock::time_point last_pool_exhausted_log{};
     std::chrono::steady_clock::time_point last_shared_frame_log{};
-    ComPtr<ID3D11Texture2D> readback_texture;
+    std::array<ComPtr<ID3D11Texture2D>, 2> readback_textures;
+    std::optional<DecodedFrame> pending_readback;
+    UINT readback_write_index{};
+    bool pipeline_readback{};
     DXGI_FORMAT readback_format{DXGI_FORMAT_UNKNOWN};
     UINT readback_width{};
     UINT readback_height{};
@@ -1096,7 +1101,8 @@ struct MediaFoundationVideoDecoder::Impl {
     bool sent_parameter_sets{};
     bool waiting_for_random_access{};
 
-    explicit Impl(DecoderPreference value) : preference(value) {}
+    explicit Impl(DecoderPreference value, bool pipeline)
+        : preference(value), pipeline_readback(pipeline) {}
 
     ~Impl() { reset_transform(); }
 
@@ -1114,7 +1120,9 @@ struct MediaFoundationVideoDecoder::Impl {
             slot.mutex.Reset();
             slot.texture.Reset();
         }
-        readback_texture.Reset();
+        pending_readback.reset();
+        for (auto& texture : readback_textures) texture.Reset();
+        readback_write_index = 0;
         readback_format = DXGI_FORMAT_UNKNOWN;
         readback_width = readback_height = 0;
         minimum_output_bytes = 0;
@@ -1625,8 +1633,10 @@ struct MediaFoundationVideoDecoder::Impl {
                 description.SampleDesc.Count, detail::MaxDxgiAllocationPadding,
                 detail::MaxDxgiReadbackBytes));
         }
-        if (!readback_texture || readback_format != description.Format ||
+        if (!readback_textures[0] || readback_format != description.Format ||
             readback_width != description.Width || readback_height != description.Height) {
+            pending_readback.reset();
+            readback_write_index = 0;
             auto readback = description;
             readback.MipLevels = 1;
             readback.ArraySize = 1;
@@ -1636,59 +1646,86 @@ struct MediaFoundationVideoDecoder::Impl {
             readback.BindFlags = 0;
             readback.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
             readback.MiscFlags = 0;
-            check(d3d_device->CreateTexture2D(&readback, nullptr, &readback_texture),
-                "create decoder DXGI readback texture");
+            for (auto& texture : readback_textures) {
+                texture.Reset();
+                check(d3d_device->CreateTexture2D(&readback, nullptr, &texture),
+                    "create decoder DXGI readback texture");
+            }
             readback_format = description.Format;
             readback_width = description.Width;
             readback_height = description.Height;
         }
 
-        d3d_context->CopySubresourceRegion(readback_texture.Get(), 0, 0, 0, 0,
+        d3d_context->CopySubresourceRegion(readback_textures[readback_write_index].Get(), 0, 0, 0, 0,
             source.Get(), source_subresource, nullptr);
-        D3D11_MAPPED_SUBRESOURCE mapped{};
-        check(d3d_context->Map(readback_texture.Get(), 0, D3D11_MAP_READ, 0, &mapped),
-            "map decoder DXGI readback texture");
-        try {
-            const auto source_layout = detail::checked_dxgi_readback_layout(
-                format.width, format.height, description.Width, description.Height,
-                description.MipLevels, description.ArraySize, source_subresource,
-                description.SampleDesc.Count, mapped.RowPitch, output_format);
-            const auto visible_layout = detail::checked_dxgi_readback_layout(
-                format.width, format.height, format.width, format.height,
-                1, 1, 0, 1, mapped.RowPitch, output_format);
-            if (!mapped.pData || !source_layout || !visible_layout) {
-                throw std::runtime_error(std::format(
-                    "invalid decoder DXGI mapped layout row_pitch={} allocation={}x{} "
-                    "visible={}x{} max_bytes={}",
-                    mapped.RowPitch, description.Width, description.Height,
-                    format.width, format.height, detail::MaxDxgiReadbackBytes));
-            }
-            const auto* source_bytes = static_cast<const std::uint8_t*>(mapped.pData);
-            const auto y_bytes = static_cast<std::size_t>(format.height) * mapped.RowPitch;
-            const auto chroma_bytes = static_cast<std::size_t>(
-                (static_cast<std::uint64_t>(format.height) + 1ULL) / 2ULL) *
-                mapped.RowPitch;
-            frame.nv12.reserve(visible_layout->total_bytes);
-            frame.nv12.insert(frame.nv12.end(), source_bytes, source_bytes + y_bytes);
-            const auto* source_chroma = source_bytes +
-                static_cast<std::size_t>(description.Height) * mapped.RowPitch;
-            frame.nv12.insert(frame.nv12.end(), source_chroma,
-                source_chroma + chroma_bytes);
-            frame.stride = static_cast<std::int32_t>(mapped.RowPitch);
-        } catch (...) {
-            d3d_context->Unmap(readback_texture.Get(), 0);
-            throw;
+        if (!pipeline_readback) {
+            readback_into_frame(frame, readback_textures[readback_write_index].Get());
+            saw_dxgi_output = true;
+            actual_acceleration = detail::DecoderAcceleration::Hardware;
+            selected_hardware = true;
+            acceleration_query_complete = true;
+            return true;
         }
-        d3d_context->Unmap(readback_texture.Get(), 0);
+        // Submit this copy now and read the previous surface. Mapping the
+        // just-decoded texture serializes GPU decode, GPU copy and CPU work;
+        // under camera/OBS load it can stall long enough to overflow the
+        // compressed input queue. One frame of latency lets these overlap.
+        d3d_context->Flush();
+        auto previous = std::exchange(pending_readback, frame);
+        readback_write_index ^= 1U;
         saw_dxgi_output = true;
         actual_acceleration = detail::DecoderAcceleration::Hardware;
         selected_hardware = true;
         acceleration_query_complete = true;
+        if (!previous) {
+            frame.width = frame.height = 0;
+            return true;
+        }
+        frame = std::move(*previous);
+        readback_into_frame(frame, readback_textures[readback_write_index].Get());
         return true;
+    }
+
+    void readback_into_frame(DecodedFrame& frame, ID3D11Texture2D* texture) {
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        check(d3d_context->Map(texture, 0, D3D11_MAP_READ, 0, &mapped),
+            "map decoder DXGI readback texture");
+        try {
+            const auto source_layout = detail::checked_dxgi_readback_layout(
+                frame.width, frame.height, readback_width, readback_height,
+                1, 1, 0, 1, mapped.RowPitch, frame.pixel_format);
+            const auto visible_layout = detail::checked_dxgi_readback_layout(
+                frame.width, frame.height, frame.width, frame.height,
+                1, 1, 0, 1, mapped.RowPitch, frame.pixel_format);
+            if (!mapped.pData || !source_layout || !visible_layout) {
+                throw std::runtime_error(std::format(
+                    "invalid decoder DXGI mapped layout row_pitch={} allocation={}x{} "
+                    "visible={}x{} max_bytes={}",
+                    mapped.RowPitch, readback_width, readback_height,
+                    frame.width, frame.height, detail::MaxDxgiReadbackBytes));
+            }
+            const auto* source_bytes = static_cast<const std::uint8_t*>(mapped.pData);
+            const auto y_bytes = static_cast<std::size_t>(frame.height) * mapped.RowPitch;
+            const auto chroma_bytes = static_cast<std::size_t>(
+                (static_cast<std::uint64_t>(frame.height) + 1ULL) / 2ULL) *
+                mapped.RowPitch;
+            frame.nv12.reserve(visible_layout->total_bytes);
+            frame.nv12.insert(frame.nv12.end(), source_bytes, source_bytes + y_bytes);
+            const auto* source_chroma = source_bytes +
+                static_cast<std::size_t>(readback_height) * mapped.RowPitch;
+            frame.nv12.insert(frame.nv12.end(), source_chroma,
+                source_chroma + chroma_bytes);
+            frame.stride = static_cast<std::int32_t>(mapped.RowPitch);
+        } catch (...) {
+            d3d_context->Unmap(texture, 0);
+            throw;
+        }
+        d3d_context->Unmap(texture, 0);
     }
 
     std::optional<DecodedFrame> receive_output() {
         for (;;) {
+            const auto output_started = std::chrono::steady_clock::now();
             MFT_OUTPUT_STREAM_INFO stream_info{};
             check(transform->GetOutputStreamInfo(0, &stream_info),
                 "get decoder output stream info");
@@ -1704,7 +1741,9 @@ struct MediaFoundationVideoDecoder::Impl {
             output.dwStreamID = 0;
             output.pSample = sample.Get();
             DWORD status{};
+            const auto process_started = std::chrono::steady_clock::now();
             const auto result = transform->ProcessOutput(0, 1, &output, &status);
+            const auto process_finished = std::chrono::steady_clock::now();
             ComPtr<IMFCollection> output_events;
             if (output.pEvents) output_events.Attach(output.pEvents);
             // When MFT_OUTPUT_STREAM_PROVIDES_SAMPLES is set, ProcessOutput
@@ -1731,6 +1770,8 @@ struct MediaFoundationVideoDecoder::Impl {
             // individual samples. Prefer it over the initial media type, as a
             // stream can switch between SDR and HDR without changing geometry.
             frame.color = color_description(decoded_sample, format, &output_color);
+            LONGLONG time{};
+            if (SUCCEEDED(decoded_sample->GetSampleTime(&time))) frame.timestamp_100ns = time;
             if (!copy_dxgi_output(decoded_sample, frame)) {
                 ComPtr<IMFMediaBuffer> contiguous;
                 check(decoded_sample->ConvertToContiguousBuffer(&contiguous),
@@ -1746,9 +1787,17 @@ struct MediaFoundationVideoDecoder::Impl {
                 }
                 contiguous->Unlock();
             }
+            if (frame.width == 0) continue; // first pipelined GPU readback
+            static std::atomic<std::uint64_t> output_count{};
+            if (++output_count % 120 == 0) {
+                const auto now = std::chrono::steady_clock::now();
+                logging::write(std::format(
+                    "mf_decoder output_timing allocation_ms={:.3f} process_ms={:.3f} readback_ms={:.3f}",
+                    std::chrono::duration<double, std::milli>(process_started - output_started).count(),
+                    std::chrono::duration<double, std::milli>(process_finished - process_started).count(),
+                    std::chrono::duration<double, std::milli>(now - process_finished).count()));
+            }
             report_acceleration_mode();
-            LONGLONG time{};
-            if (SUCCEEDED(decoded_sample->GetSampleTime(&time))) frame.timestamp_100ns = time;
             UINT32 raw_stride{};
             if (frame.stride != 0) {
                 // DXGI readback preserves the actual row pitch.
@@ -1883,6 +1932,7 @@ struct MediaFoundationVideoDecoder::Impl {
         std::vector<DecodedFrame> decoded;
         if (!asynchronous) {
             while (auto output = receive_output()) decoded.push_back(std::move(*output));
+            drain_readback(decoded);
             return decoded;
         }
         bool drain_complete{};
@@ -1894,10 +1944,21 @@ struct MediaFoundationVideoDecoder::Impl {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         }
+        drain_readback(decoded);
         return decoded;
     }
 
+    void drain_readback(std::vector<DecodedFrame>& decoded) {
+        if (!pending_readback) return;
+        auto last = std::move(*pending_readback);
+        pending_readback.reset();
+        readback_into_frame(last, readback_textures[readback_write_index ^ 1U].Get());
+        decoded.push_back(std::move(last));
+    }
+
     void flush() {
+        pending_readback.reset();
+        readback_write_index = 0;
         if (software_444) {
             software_444->flush();
             waiting_for_random_access = true;
@@ -1926,36 +1987,35 @@ struct MediaFoundationVideoDecoder::Impl {
         if (waiting_for_random_access && !random_access) return {};
         if (random_access) waiting_for_random_access = false;
         if (software_444) return software_444->decode(sample, timestamp);
-        try {
+        return detail::decode_with_fallback([&]() -> std::vector<DecodedFrame> {
+            if (waiting_for_random_access) return {};
             return decode_once(sample, timestamp, duration, random_access);
-        } catch (const std::exception& error) {
+        }, [&](const std::exception& error) {
             const auto failed_name = selected_name;
             logging::write(std::format(
                 "mf_decoder runtime_failure selected={} random_access={} reason={}",
                 failed_name, random_access ? "true" : "false", error.what()));
             const auto next = candidate_index == std::numeric_limits<std::size_t>::max()
                 ? candidates.size() : candidate_index + 1U;
-            if (next >= candidates.size()) throw;
+            if (next >= candidates.size()) return false;
             select_first_working_candidate(next);
             logging::write(std::format("mf_decoder fallback from={} to={}",
                 failed_name, selected_name));
-            if (!random_access) {
-                waiting_for_random_access = true;
-                return {};
-            }
-            return decode_once(sample, timestamp, duration, true);
-        }
+            if (!random_access) waiting_for_random_access = true;
+            return true;
+        });
     }
 };
 
-MediaFoundationVideoDecoder::MediaFoundationVideoDecoder(DecoderPreference preference) {
+MediaFoundationVideoDecoder::MediaFoundationVideoDecoder(DecoderPreference preference,
+    bool pipeline_readback) {
     const auto com_result = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(com_result) && com_result != RPC_E_CHANGED_MODE)
         check(com_result, "CoInitializeEx");
     com_initialized_ = SUCCEEDED(com_result);
     try {
         ensure_media_foundation();
-        impl_ = std::make_unique<Impl>(preference);
+        impl_ = std::make_unique<Impl>(preference, pipeline_readback);
     } catch (...) {
         impl_.reset();
         if (com_initialized_) {

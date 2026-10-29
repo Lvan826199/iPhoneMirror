@@ -734,10 +734,10 @@ internal sealed class NativeCore : IDisposable
             : (false, GetLastError(LocalizationService.Get("MediaCastReceiverMissing")));
     }
 
-    public (bool Running, bool Ready) GetMediaCastReceiverStatus()
+    public (bool Running, bool Ready, bool PartialFailure) GetMediaCastReceiverStatus()
     {
         var result = im_media_cast_receiver_get_status(out var running, out var ready);
-        return result == 0 ? (running != 0, ready != 0) : (false, false);
+        return result == 0 ? (running != 0, ready == 1, ready == 2) : (false, false, false);
     }
 
     public MediaCastRequest? GetMediaCastRequest()

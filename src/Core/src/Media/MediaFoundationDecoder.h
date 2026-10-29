@@ -153,8 +153,11 @@ namespace detail {
 
 class MediaFoundationVideoDecoder {
 public:
+    // Continuous USB mirroring can overlap GPU readback by one frame. Keep
+    // single/static-frame consumers immediate unless they explicitly opt in.
     explicit MediaFoundationVideoDecoder(
-        DecoderPreference preference = DecoderPreference::Auto);
+        DecoderPreference preference = DecoderPreference::Auto,
+        bool pipeline_readback = false);
     ~MediaFoundationVideoDecoder();
     MediaFoundationVideoDecoder(const MediaFoundationVideoDecoder&) = delete;
     MediaFoundationVideoDecoder& operator=(const MediaFoundationVideoDecoder&) = delete;

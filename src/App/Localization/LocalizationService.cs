@@ -59,6 +59,11 @@ internal static class LocalizationService
 
     internal static string RefreshText(string value) => LocalizedText.Refresh(value);
 
+    // Preserve known business refusals, but never display an arbitrary OS/runtime
+    // exception as the user-facing recovery instructions. Callers log the exception.
+    internal static string ErrorMessage(Exception error, string fallbackKey) =>
+        LocalizedText.IsLocalized(error.Message) ? error.Message : Get(fallbackKey);
+
     internal static string Join(string separator, IEnumerable<string?> values) =>
         LocalizedText.Join(separator, values);
 

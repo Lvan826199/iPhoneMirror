@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
@@ -157,6 +157,17 @@ internal static partial class Program
                 Console.In.ReadToEnd();
                 return 0;
             }
+            if (args is ["--media-output-ui", var mediaUiOutput])
+            {
+                var mediaApp = new App { IsUiPreviewMode = true, ShutdownMode = ShutdownMode.OnExplicitShutdown };
+                mediaApp.InitializeComponent();
+                SetAuditCulture("zh-CN");
+                IPhoneMirror.App.Services.ThemeService.Apply(IPhoneMirror.App.Updater.AppTheme.Light);
+                IPhoneMirror.UI.Services.AccessibilityAppearance.Apply(mediaApp, 2, false);
+                try { TestParallelMediaOutputUi(mediaUiOutput); }
+                finally { mediaApp.Shutdown(); }
+                return 0;
+            }
             if (args is ["--media-review"])
             {
                 var mediaApp = new App { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -168,6 +179,10 @@ internal static partial class Program
             }
             if (args is ["--virtual-camera-regression"])
                 return RunVirtualCameraRegressionTests();
+            if (args is ["--virtual-camera-live", var cameraOutput,
+                    var cameraWidth, var cameraHeight, var cameraSeconds])
+                return RunVirtualCameraLiveValidation(cameraOutput,
+                    uint.Parse(cameraWidth), uint.Parse(cameraHeight), int.Parse(cameraSeconds));
             if (args is ["--updater-elevation-regression"])
                 return RunUpdaterElevationRegressionTests();
             if (args is ["--updater-window-regression"])
@@ -188,6 +203,15 @@ internal static partial class Program
                 reviewApp.InitializeComponent();
                 try { TestLogicReviewRegressions(); }
                 finally { reviewApp.Shutdown(); }
+                return 0;
+            }
+            if (args is ["--retry-fallback-regressions", var regressionWirelessHost])
+            {
+                var regressionApp = new App { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+                typeof(App).GetProperty("IsUiPreviewMode", KeyboardTestMembers)!.SetValue(regressionApp, true);
+                regressionApp.InitializeComponent();
+                try { TestRetryFallbackRegressions(regressionWirelessHost); }
+                finally { regressionApp.Shutdown(); }
                 return 0;
             }
             if (args is ["--ui-audit-fixes", var fixesOutput])
@@ -241,17 +265,39 @@ internal static partial class Program
                 return LocalizationAuditTests.RunDriver(localizedDriverAssembly);
             if (args is ["--driver-combobox", var comboDriverAssembly])
                 return RunDriverComboBoxTests(comboDriverAssembly);
+            if (args is ["--driver-layout", var layoutDriverAssembly, var driverLayoutOutput])
+                return RunDriverComboBoxTests(layoutDriverAssembly, driverLayoutOutput);
             if (args is ["--driver-ui-audit", var sourceRoot, var driverAssembly, var driverOutput])
                 return RunDriverConsistencyAudit(sourceRoot, driverAssembly, driverOutput);
+            if (args is ["--driver-ui-audit", var localizedSourceRoot, var driverMatrixAssembly, var localizedDriverOutput, "--culture", var driverCulture] &&
+                IPhoneMirror.UI.Services.SupportedUiCultures.All.Contains(driverCulture))
+                return RunDriverConsistencyAudit(localizedSourceRoot, driverMatrixAssembly, localizedDriverOutput, driverCulture);
+            if (args is ["--ui-resource-regressions", var resourceOutput])
+                return RunUiResourceRegressions(resourceOutput);
+            if (args is ["--ui-accessibility-audit", var accessibilityOutput])
+                return RunUiAccessibilityAudit(accessibilityOutput);
+            if (args is ["--scrollbar-layout-audit", var scrollbarOutput])
+                return RunScrollBarLayoutAudit(scrollbarOutput);
+            if (args is ["--balanced-ui", var balancedOutput])
+                return RunBalancedUiTests(balancedOutput);
+            if (args is ["--live-capture-validation", var captureValidationUdid, var captureValidationOutput])
+                return RunLiveCaptureValidation(captureValidationUdid, captureValidationOutput);
+            if (args is ["--framework-ja", var publishedRoot])
+                return AuditJapaneseFrameworkResources(publishedRoot);
+            if (args is ["--standalone-ui-audit", var standaloneOutput])
+                return RunStandaloneUiAudit(standaloneOutput);
+            if (args is ["--standalone-ui-audit", var focusedStandaloneOutput, "--culture", var standaloneCulture] &&
+                IPhoneMirror.UI.Services.SupportedUiCultures.All.Contains(standaloneCulture))
+                return RunStandaloneUiAudit(focusedStandaloneOutput, standaloneCulture);
             if (args is ["--ui-audit", var auditOutput])
                 return RunConsistencyAudit(auditOutput);
             if (args is ["--ui-audit", var cultureOutput, "--culture", var auditCulture] &&
-                auditCulture is "zh-CN" or "zh-HK" or "zh-TW" or "en-US")
+                IPhoneMirror.UI.Services.SupportedUiCultures.All.Contains(auditCulture))
                 return RunConsistencyAudit(cultureOutput, onlyCulture: auditCulture);
             if (args is ["--ui-audit", var focusedOutput, var focusedSurface])
                 return RunConsistencyAudit(focusedOutput, focusedSurface);
             if (args is ["--ui-audit", var localizedOutput, var localizedSurface, "--culture", var localizedCulture] &&
-                localizedCulture is "zh-CN" or "zh-HK" or "zh-TW" or "en-US")
+                IPhoneMirror.UI.Services.SupportedUiCultures.All.Contains(localizedCulture))
                 return RunConsistencyAudit(localizedOutput, localizedSurface, localizedCulture);
             if (args is ["--preview-shell-ui-audit", var previewOutput])
                 return RunPreviewShellAudit(previewOutput);
@@ -1909,7 +1955,7 @@ internal static partial class Program
                 "Release notes did not create a vertical scrollbar.");
         scrollBar.ApplyTemplate();
         if (scrollBar.Width != 6 ||
-            scrollBar.RenderTransform is not TranslateTransform { X: 6 } ||
+            scrollBar.MinWidth != 0 || Math.Abs(scrollBar.RenderTransform.Value.OffsetX) > .01 ||
             scrollBar.Template.FindName("ScrollThumb", scrollBar) is not WpfThumb thumb ||
             thumb.Width != 2)
             throw new InvalidOperationException(

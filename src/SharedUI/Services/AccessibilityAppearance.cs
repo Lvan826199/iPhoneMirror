@@ -23,9 +23,27 @@ internal static class AccessibilityAppearance
             foreach (DictionaryEntry entry in tokens)
                 if (entry.Key is string key && entry.Value is double size &&
                     (key.Contains("FontSize", StringComparison.Ordinal) || key.EndsWith("LineHeight", StringComparison.Ordinal)))
-                    _overrides[key] = size * scale;
+                    _overrides[key] = ScaleTypography(key, size, scale);
+        var spacing = scale - 1;
+        _overrides["PagePadding"] = new Thickness(24 + 8 * spacing, 20 + 8 * spacing, 24 + 8 * spacing, 20 + 8 * spacing);
+        _overrides["DialogPadding"] = new Thickness(24 + 8 * spacing);
+        _overrides["CardPadding"] = new Thickness(16 + 6 * spacing);
+        _overrides["WindowActionsMargin"] = new Thickness(24 + 8 * spacing, 20 + 8 * spacing, 24 + 8 * spacing, 0);
+        _overrides["SetupPageMaxWidth"] = 680 + 260 * spacing;
+        _overrides["SetupAssessmentMaxWidth"] = 720 + 260 * spacing;
+        _overrides["SetupWelcomeMaxWidth"] = 440 + 200 * spacing;
         if (highContrast ?? SystemParameters.HighContrast) AddContrastPalette(_overrides);
         dictionaries.Add(_overrides);
+    }
+
+    // Reading and input text retain the requested accessibility scale. Large
+    // display headings grow more gently, so a 200% page still has room to read
+    // and operate its content rather than becoming a wall of title text.
+    internal static double ScaleTypography(string key, double size, double scale)
+    {
+        if (key.EndsWith("LineHeight", StringComparison.Ordinal) || size < 18)
+            return size * scale;
+        return Math.Max(14 * scale, size + 16 * (scale - 1));
     }
 
     private static double ReadTextScale()

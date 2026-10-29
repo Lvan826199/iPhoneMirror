@@ -30,6 +30,8 @@ internal static class LocalizedText
     internal static string Refresh(string value) => Sources.TryGetValue(value, out var source)
         ? Remember(Render(source), source) : value;
 
+    internal static bool IsLocalized(string value) => Sources.TryGetValue(value, out _);
+
     private static string Render(Source source)
     {
         var arguments = source.Arguments.Select(value => value is string text

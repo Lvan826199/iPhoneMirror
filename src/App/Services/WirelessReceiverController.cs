@@ -11,10 +11,11 @@ internal sealed class WirelessReceiverController(
 {
     private readonly WirelessReceiverService _receiver = receiver ?? new();
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
-    private static readonly TimeSpan UxPlayStartupGracePeriod =
+    private static readonly TimeSpan StartupGracePeriod =
         TimeSpan.FromSeconds(15);
     private DateTime _automaticStartNotBeforeUtc;
     private DateTime _lastReceiverStartUtc;
+    private bool _lastReceiverReachedReady;
     private WirelessReceiverBackend _lastStartedBackend =
         WirelessReceiverBackend.Original;
     private bool _automaticRestartBlocked;
@@ -60,23 +61,38 @@ internal sealed class WirelessReceiverController(
 
             var automaticStart = receiverName is null && displayProfile is null &&
                 backend is null;
-            if (!automaticStart) _automaticRestartBlocked = false;
+            if (!automaticStart)
+            {
+                _automaticRestartBlocked = false;
+                _automaticStartNotBeforeUtc = default;
+            }
             var status = core.GetWirelessReceiverStatus();
             Running = status.Running;
             Ready = status.Ready;
             if (!Running && automaticStart && !_automaticRestartBlocked &&
-                selectedBackend == WirelessReceiverBackend.UxPlay &&
-                _lastStartedBackend == WirelessReceiverBackend.UxPlay &&
+                selectedBackend == _lastStartedBackend &&
                 _lastReceiverStartUtc != default &&
-                DateTime.UtcNow - _lastReceiverStartUtc < UxPlayStartupGracePeriod)
+                (!_lastReceiverReachedReady ||
+                 DateTime.UtcNow - _lastReceiverStartUtc < StartupGracePeriod))
             {
-                // A missing GStreamer plugin or invalid UxPlay pipeline exits
-                // just after the IPC host reports Ready. Do not restart that
-                // broken child every refresh tick and make AirPlay discovery
-                // flap; a manual Apply is the explicit retry path.
+                // Both backends can exit after process creation. Keep startup
+                // failures visible until a manual Apply, including when a slow
+                // refresh did not observe the exit within the grace period.
                 _automaticRestartBlocked = true;
-                StartError = LocalizationService.Get("WirelessUxPlayStartupFailed");
+                StartError = selectedBackend == WirelessReceiverBackend.UxPlay
+                    ? LocalizationService.Get("WirelessUxPlayStartupFailed")
+                    : LocalizationService.Get("WirelessOriginalStartupFailed");
                 return new(false, StartError, true);
+            }
+            if (Running)
+            {
+                if (Ready)
+                {
+                    _lastReceiverReachedReady = true;
+                    StartError = null;
+                    _automaticRestartBlocked = false;
+                }
+                return new(true, null, false);
             }
             if (automaticStart && _automaticRestartBlocked)
             {
@@ -86,13 +102,7 @@ internal sealed class WirelessReceiverController(
             if (automaticStart && DateTime.UtcNow < _automaticStartNotBeforeUtc)
             {
                 Running = Ready = false;
-                return new(false, null, false);
-            }
-
-            if (Running)
-            {
-                StartError = null;
-                return new(true, null, false);
+                return new(false, StartError, false);
             }
 
             var hostPath = _receiver.GetExecutablePath(selectedBackend);
@@ -122,14 +132,16 @@ internal sealed class WirelessReceiverController(
                 AppliedBackend = selectedBackend;
                 _lastStartedBackend = selectedBackend;
                 _lastReceiverStartUtc = DateTime.UtcNow;
+                _lastReceiverReachedReady = false;
                 AppliedReceiverName = sanitized;
                 AppliedProfile = profile;
-                StartError = null;
+                // Retain the previous failure until a status probe confirms Ready.
                 return new(true, null, false);
             }
 
             var isNewError = !string.Equals(StartError, started.Message, StringComparison.Ordinal);
             StartError = started.Message;
+            _automaticStartNotBeforeUtc = DateTime.UtcNow + TimeSpan.FromSeconds(30);
             return new(false, started.Message, isNewError);
         }
         finally
@@ -150,6 +162,7 @@ internal sealed class WirelessReceiverController(
             _automaticStartNotBeforeUtc = DateTime.UtcNow + automaticStartDelay;
             _automaticRestartBlocked = false;
             _lastReceiverStartUtc = default;
+            _lastReceiverReachedReady = false;
             Running = Ready = false;
             StartError = null;
             _lifecycleGate.Release();

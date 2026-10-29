@@ -216,8 +216,12 @@ private:
 
 FramePublisher::~FramePublisher() { close(); }
 
-HRESULT FramePublisher::open_for_current_user() {
+HRESULT FramePublisher::open_for_current_user(std::uint32_t frame_rate,
+    std::uint32_t output_width, std::uint32_t output_height) {
     close();
+    if (frame_rate < 10 || frame_rate > 60) return E_INVALIDARG;
+    if ((output_width != 0 || output_height != 0) &&
+        !valid_output_size(output_width, output_height)) return E_INVALIDARG;
 
     SECURITY_ATTRIBUTES attributes{};
     LocalMemory descriptor;
@@ -256,6 +260,8 @@ HRESULT FramePublisher::open_for_current_user() {
     view_->version = FrameVersion;
     view_->header_size = static_cast<std::uint16_t>(sizeof(SharedFrameHeader));
     view_->pixel_format = FramePixelFormatBgra8;
+    view_->output_frame_rate = frame_rate | (output_width << 7U) |
+        (output_height << 19U);
     channel_worker_ = std::jthread(
         [this](std::stop_token token) { serve_channel_path(token); });
     return S_OK;
@@ -406,7 +412,28 @@ HRESULT FrameReader::open(const wchar_t* channel_path) {
     return S_OK;
 }
 
-bool FrameReader::read(FrameSnapshot& snapshot) const {
+std::uint32_t FrameReader::output_frame_rate() const noexcept {
+    // Configuration is written before discovery starts and never changes for
+    // this channel. It must be readable before the first pixel frame arrives.
+    if (view_ == nullptr || view_->magic != FrameMagic ||
+        view_->version != FrameVersion ||
+        view_->header_size != sizeof(SharedFrameHeader))
+        return 0;
+    const auto frame_rate = view_->output_frame_rate & 0x7fU;
+    return frame_rate >= 10 && frame_rate <= 60 ? frame_rate : 0;
+}
+
+std::uint32_t FrameReader::output_width() const noexcept {
+    return output_frame_rate() == 0 ? 0 :
+        (view_->output_frame_rate >> 7U) & 0xfffU;
+}
+
+std::uint32_t FrameReader::output_height() const noexcept {
+    return output_frame_rate() == 0 ? 0 :
+        (view_->output_frame_rate >> 19U) & 0xfffU;
+}
+
+bool FrameReader::read(FrameSnapshot& snapshot, std::uint64_t after_published_frames) const {
     if (view_ == nullptr) return false;
     FileRangeLock file_lock(backing_file_, false);
     if (!file_lock.locked()) return false;
@@ -423,6 +450,8 @@ bool FrameReader::read(FrameSnapshot& snapshot) const {
         SharedFrameHeader header{};
         std::memcpy(&header, view_, sizeof(header));
         if (!valid_header(header)) return false;
+        if (after_published_frames != 0 &&
+            header.published_frames == after_published_frames) return false;
 
         try {
             snapshot.pixels.resize(header.payload_size);

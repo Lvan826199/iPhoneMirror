@@ -127,7 +127,7 @@ internal static partial class Program
             var language = typeof(App).Assembly.GetType("IPhoneMirror.App.Localization.LocalizationService")!
                 .GetMethod("ApplyLanguage", BindingFlags.Static | BindingFlags.NonPublic)!;
             var layoutFindings = new HashSet<string>();
-            foreach (var culture in new[] { "zh-CN", "zh-HK", "zh-TW", "en-US", "ja-JP" })
+            foreach (var culture in ReviewCapture ? new[] { "zh-CN" } : new[] { "zh-CN", "zh-HK", "zh-TW", "en-US", "ja-JP" })
             foreach (var theme in new[] { AppTheme.Light, AppTheme.Dark })
             {
                 language.Invoke(null, [culture, false, true]);
@@ -150,7 +150,8 @@ internal static partial class Program
             InteractionAssert(startCount == 1 && !start.IsEnabled, "Rapid clicks started duplicate projections.");
             pending.SetException(new InvalidOperationException("Expected connection failure for regression test."));
             AdvanceDispatcher(TimeSpan.FromMilliseconds(80));
-            InteractionAssert(start.IsEnabled && ((TextBlock)panel.FindName("FeedbackText")).Text.Contains("Expected connection failure"),
+            InteractionAssert(start.IsEnabled && ((TextBlock)panel.FindName("FeedbackText")).Text ==
+                IPhoneMirror.App.Localization.LocalizationService.Get("TrayStartFailed"),
                 "Projection failure did not restore controls and display feedback.");
             pending = new TaskCompletionSource();
             start.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
